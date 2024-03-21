@@ -1,4 +1,8 @@
+from typing import TYPE_CHECKING, cast
+
 from django.db import models
+
+from djangomypytest.mypy_plugin.annotations import Concrete
 
 
 class Question(models.Model):
@@ -19,12 +23,19 @@ class Parent(models.Model):
         abstract = True
 
 
+if TYPE_CHECKING:
+    _Parent_concrete = cast(Concrete[Parent], None)
+    # This next line failing means you need to restart dmypy
+    _Parent_concrete.objects
+
+
 class Child1(Parent):
     two = models.CharField(max_length=60)
 
 
 class Child2(Parent):
     two = models.CharField(max_length=60)
+    four = models.CharField(max_length=1)
 
     three = models.CharField(max_length=70)
 

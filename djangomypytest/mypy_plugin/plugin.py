@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Callable
 from functools import partial
 from typing import TypedDict, cast
@@ -10,7 +11,7 @@ from mypy.types import Instance, ProperType, UnionType, get_proper_type
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
-from mypy_django_plugin.lib import helpers
+from mypy_django_plugin.lib import fullnames, helpers
 
 
 class DjangoExtendedTypeMetadata(TypedDict):
@@ -18,37 +19,38 @@ class DjangoExtendedTypeMetadata(TypedDict):
 
 
 def get_extended_django_metadata(model_info: TypeInfo) -> DjangoExtendedTypeMetadata:
-    meta = cast(DjangoExtendedTypeMetadata, model_info.metadata.setdefault("django_extended", {}))
-    if "concrete_children" not in meta:
-        meta["concrete_children"] = []
-    return meta
+    return cast(DjangoExtendedTypeMetadata, model_info.metadata.setdefault("django_extended", {}))
 
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: main.Options):
         super().__init__(options)
 
-        self._considered_for_concrete_models: set[str] = set()
+        self.concrete_children: dict[str, list[str]] = defaultdict(list)
 
     def get_type_analyze_hook(
         self, fullname: str
     ) -> Callable[[AnalyzeTypeContext], MypyType] | None:
         if fullname == "djangomypytest.mypy_plugin.annotations.Concrete":
-            return partial(find_concrete_models, django_context=self.django_context)
+            return partial(find_concrete_models, django_context=self.django_context, plugin=self)
         else:
             return super().get_type_analyze_hook(fullname)
 
     def get_customize_class_mro_hook(
         self, fullname: str
     ) -> Callable[[ClassDefContext], None] | None:
-        if fullname and fullname not in self._considered_for_concrete_models:
-            self._considered_for_concrete_models.add(fullname)
+        if fullname:
             sym = self.lookup_fully_qualified(fullname)
             if sym is not None and isinstance(sym.node, TypeInfo) and len(sym.node.mro) > 2:
-                if not helpers.is_abstract_model(sym.node):
+                if any(
+                    m.fullname == fullnames.MODEL_CLASS_FULLNAME for m in sym.node.mro
+                ) and not helpers.is_abstract_model(sym.node):
                     for typ in sym.node.mro[1:-2]:
                         if typ.fullname != sym.node.fullname and helpers.is_abstract_model(typ):
                             meta = get_extended_django_metadata(typ)
+                            if "concrete_children" not in meta:
+                                meta["concrete_children"] = self.concrete_children[typ.fullname]
+
                             if sym.node.fullname not in meta["concrete_children"]:
                                 meta["concrete_children"].append(sym.node.fullname)
 
@@ -62,11 +64,12 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                             if reviewed != meta["concrete_children"]:
                                 meta["concrete_children"].clear()
                                 meta["concrete_children"].extend(reviewed)
-
         return super().get_customize_class_mro_hook(fullname)
 
 
-def find_concrete_models(ctx: AnalyzeTypeContext, django_context: DjangoContext) -> ProperType:
+def find_concrete_models(
+    ctx: AnalyzeTypeContext, django_context: DjangoContext, plugin: ExtendedMypyStubs
+) -> ProperType:
     args = ctx.type.args
     type_arg = ctx.api.analyze_type(args[0])
 
@@ -81,10 +84,25 @@ def find_concrete_models(ctx: AnalyzeTypeContext, django_context: DjangoContext)
         type_arg = type_arg.type.bases[0]
 
     meta = get_extended_django_metadata(type_arg.type)
+    if "concrete_children" not in meta:
+        meta["concrete_children"] = plugin.concrete_children[type_arg.type.fullname]
 
-    return get_proper_type(
-        UnionType(tuple(ctx.api.named_type(name) for name in meta["concrete_children"]))
-    )
+    concrete: list[Instance] = []
+    reviewed: list[str] = []
+    for name in meta["concrete_children"]:
+        try:
+            nxt = ctx.api.api.named_type(name)
+        except AssertionError:
+            pass
+        else:
+            concrete.append(nxt)
+            reviewed.append(name)
+
+    if meta["concrete_children"] != reviewed:
+        meta["concrete_children"].clear()
+        meta["concrete_children"].extend(reviewed)
+
+    return get_proper_type(UnionType(tuple(concrete)))
 
 
 def plugin(version):
