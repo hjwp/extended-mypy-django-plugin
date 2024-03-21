@@ -3,11 +3,11 @@ from collections.abc import Callable
 from functools import partial
 from typing import TypedDict, cast
 
-from mypy.nodes import TypeInfo
-from mypy.plugin import AnalyzeTypeContext, ClassDefContext, SymbolTableNode
+from mypy.nodes import AssignmentStmt, NameExpr, SymbolTableNode, TypeInfo
+from mypy.plugin import AnalyzeTypeContext, ClassDefContext
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import Instance, ProperType, UnionType, get_proper_type
+from mypy.types import Instance, LiteralType, ProperType, UnionType, get_proper_type
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -59,9 +59,9 @@ def _fill_out_concrete_children(
     if sym is not None and isinstance(sym.node, TypeInfo) and len(sym.node.mro) > 2:
         if any(
             m.fullname == fullnames.MODEL_CLASS_FULLNAME for m in sym.node.mro
-        ) and not helpers.is_abstract_model(sym.node):
+        ) and not is_abstract_model(sym.node):
             for typ in sym.node.mro[1:-2]:
-                if typ.fullname != sym.node.fullname and helpers.is_abstract_model(typ):
+                if typ.fullname != sym.node.fullname and is_abstract_model(typ):
                     meta = get_extended_django_metadata(typ)
                     if "concrete_children" not in meta:
                         meta["concrete_children"] = concrete_children[typ.fullname]
@@ -73,7 +73,7 @@ def _fill_out_concrete_children(
                     for child in meta["concrete_children"]:
                         child_sym = lookup_fully_qualified(child)
                         if child_sym and isinstance(child_sym.node, TypeInfo):
-                            if not helpers.is_abstract_model(child_sym.node):
+                            if not is_abstract_model(child_sym.node):
                                 reviewed.append(child_sym.node.fullname)
 
                     if reviewed != meta["concrete_children"]:
@@ -117,6 +117,48 @@ def find_concrete_models(
         meta["concrete_children"].extend(reviewed)
 
     return get_proper_type(UnionType(tuple(concrete)))
+
+
+if hasattr(helpers, "is_abstract_model"):
+    is_abstract_model = helpers.is_abstract_model
+else:
+
+    def is_model_type(info: TypeInfo) -> bool:
+        return info.metaclass_type is not None and info.metaclass_type.type.has_base(
+            "django.db.models.base.ModelBase"
+        )
+
+    def is_abstract_model(model: TypeInfo) -> bool:
+        if not is_model_type(model):
+            return False
+
+        metadata = helpers.get_django_metadata(model)
+        if metadata.get("is_abstract_model") is not None:
+            return metadata["is_abstract_model"]
+
+        meta = model.names.get("Meta")
+        # Check if 'abstract' is declared in this model's 'class Meta' as
+        # 'abstract = True' won't be inherited from a parent model.
+        if meta is not None and isinstance(meta.node, TypeInfo) and "abstract" in meta.node.names:
+            for stmt in meta.node.defn.defs.body:
+                if (
+                    # abstract =
+                    isinstance(stmt, AssignmentStmt)
+                    and len(stmt.lvalues) == 1
+                    and isinstance(stmt.lvalues[0], NameExpr)
+                    and stmt.lvalues[0].name == "abstract"
+                ):
+                    # abstract = True (builtins.bool)
+                    rhs_is_true = helpers.parse_bool(stmt.rvalue) is True
+                    # abstract: Literal[True]
+                    is_literal_true = (
+                        isinstance(stmt.type, LiteralType) and stmt.type.value is True
+                    )
+                    metadata["is_abstract_model"] = rhs_is_true or is_literal_true
+                    return metadata["is_abstract_model"]
+
+        metadata["is_abstract_model"] = False
+        return False
 
 
 def plugin(version):
