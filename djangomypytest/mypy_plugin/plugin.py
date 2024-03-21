@@ -1,4 +1,3 @@
-from collections import defaultdict
 from collections.abc import Callable
 from functools import partial
 from typing import TypedDict, cast
@@ -29,18 +28,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: main.Options):
         super().__init__(options)
 
-        self.concrete_models: dict[str, list[TypeInfo]] = defaultdict(list)
         self._considered_for_concrete_models: set[str] = set()
 
     def get_type_analyze_hook(
         self, fullname: str
     ) -> Callable[[AnalyzeTypeContext], MypyType] | None:
         if fullname == "djangomypytest.mypy_plugin.annotations.Concrete":
-            return partial(
-                find_concrete_models,
-                django_context=self.django_context,
-                concrete_models=self.concrete_models,
-            )
+            return partial(find_concrete_models, django_context=self.django_context)
         else:
             return super().get_type_analyze_hook(fullname)
 
@@ -72,11 +66,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         return super().get_customize_class_mro_hook(fullname)
 
 
-def find_concrete_models(
-    ctx: AnalyzeTypeContext,
-    django_context: DjangoContext,
-    concrete_models: dict[str, list[TypeInfo]],
-) -> ProperType:
+def find_concrete_models(ctx: AnalyzeTypeContext, django_context: DjangoContext) -> ProperType:
     args = ctx.type.args
     type_arg = ctx.api.analyze_type(args[0])
 
