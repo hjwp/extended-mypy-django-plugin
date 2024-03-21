@@ -27,3 +27,16 @@ class Child2(Parent):
     two = models.CharField(max_length=60)
 
     three = models.CharField(max_length=70)
+
+
+class Parent2(Parent):
+    three = models.CharField(max_length=50)
+
+    class Meta:
+        abstract = True
+
+
+class Child3(Parent2):
+    two = models.CharField(max_length=60)
+
+    three = models.CharField(max_length=70)

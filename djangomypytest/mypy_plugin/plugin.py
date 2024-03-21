@@ -50,19 +50,24 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if fullname and fullname not in self._considered_for_concrete_models:
             self._considered_for_concrete_models.add(fullname)
             sym = self.lookup_fully_qualified(fullname)
-            if (
-                sym is not None
-                and isinstance(sym.node, TypeInfo)
-                and len(sym.node.mro) > 2
-                and sym.fullname != sym.node.mro[1].fullname
-                and helpers.is_model_type(sym.node.mro[1])
-            ):
-                if not helpers.is_abstract_model(sym.node) and helpers.is_abstract_model(
-                    sym.node.mro[1]
-                ):
-                    meta = get_extended_django_metadata(sym.node.mro[1])
-                    if sym.node not in meta["concrete_children"]:
-                        meta["concrete_children"].append(sym.node.fullname)
+            if sym is not None and isinstance(sym.node, TypeInfo) and len(sym.node.mro) > 2:
+                if not helpers.is_abstract_model(sym.node):
+                    for typ in sym.node.mro[1:-2]:
+                        if typ.fullname != sym.node.fullname and helpers.is_abstract_model(typ):
+                            meta = get_extended_django_metadata(typ)
+                            if sym.node.fullname not in meta["concrete_children"]:
+                                meta["concrete_children"].append(sym.node.fullname)
+
+                            reviewed: list[str] = []
+                            for child in meta["concrete_children"]:
+                                child_sym = self.lookup_fully_qualified(child)
+                                if child_sym and isinstance(child_sym.node, TypeInfo):
+                                    if not helpers.is_abstract_model(child_sym.node):
+                                        reviewed.append(child_sym.node.fullname)
+
+                            if reviewed != meta["concrete_children"]:
+                                meta["concrete_children"].clear()
+                                meta["concrete_children"].extend(reviewed)
 
         return super().get_customize_class_mro_hook(fullname)
 
