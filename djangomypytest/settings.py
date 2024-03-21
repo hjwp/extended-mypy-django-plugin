@@ -38,6 +38,7 @@ INSTALLED_APPS: Sequence[str] = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "djangomypytest.exampleapp",
 ]
 
 MIDDLEWARE: Sequence[str] = [
@@ -75,10 +76,7 @@ WSGI_APPLICATION: str = "djangomypytest.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES: Mapping[str, object] = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": {"ENGINE": "django.db.backends.postgresql", "NAME": "djangomypytest"}
 }
 
 

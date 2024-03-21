@@ -13,7 +13,8 @@ authors = [
 ]
 dependencies = [
     "django==4.2.9",
-    "django-stubs==4.2.7"
+    "django-stubs==4.2.7",
+    "psycopg2-binary==2.9.9"
 ]
 
 [tool.hatch.version]
@@ -55,7 +56,7 @@ exclude = [
     "__pycache__",
 ]
 plugins = [
-    "mypy_django_plugin.main"
+    "djangomypytest.mypy_plugin.plugin"
 ]
 
 [tool.django-stubs]
