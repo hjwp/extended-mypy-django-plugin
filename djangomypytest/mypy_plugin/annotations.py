@@ -31,3 +31,9 @@ class Concrete(Generic[T_Parent]):
     @classmethod
     def type_var(cls, name: str, parent: type[models.Model]) -> TypeVar:
         return TypeVar(name, *cls.find_children(parent))
+
+
+class ConcreteQuerySet(Generic[T_Parent]): ...
+
+
+class DefaultQuerySet(Generic[T_Parent]): ...

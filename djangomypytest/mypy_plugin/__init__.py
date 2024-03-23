@@ -1,3 +1,3 @@
-from .annotations import Concrete
+from .annotations import Concrete, ConcreteQuerySet, DefaultQuerySet
 
-__all__ = ["Concrete"]
+__all__ = ["Concrete", "ConcreteQuerySet", "DefaultQuerySet"]

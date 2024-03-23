@@ -1,17 +1,25 @@
 import dataclasses
 from collections.abc import Callable
 
+from django.db.models import Manager
+from mypy.checker import TypeChecker
 from mypy.nodes import (
     GDEF,
     AssignmentStmt,
     CallExpr,
+    MemberExpr,
     NameExpr,
     StrExpr,
     SymbolTableNode,
     TypeInfo,
     TypeVarExpr,
 )
-from mypy.plugin import AnalyzeTypeContext, ClassDefContext, DynamicClassDefContext
+from mypy.plugin import (
+    AnalyzeTypeContext,
+    AttributeContext,
+    ClassDefContext,
+    DynamicClassDefContext,
+)
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
 from mypy.types import (
@@ -20,20 +28,33 @@ from mypy.types import (
     LiteralType,
     ProperType,
     TypeOfAny,
+    TypeVarType,
     UnionType,
     get_proper_type,
 )
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
+from mypy_django_plugin.django.context import DjangoContext
 from mypy_django_plugin.lib import fullnames, helpers
+from mypy_django_plugin.transformers.managers import (
+    resolve_manager_method,
+    resolve_manager_method_from_instance,
+)
+from mypy_django_plugin.transformers.models import AddManagers
+
+
+class CustomizedAddManagers(AddManagers):
+    def __init__(self, api: SemanticAnalyzer | TypeChecker, django_context: DjangoContext) -> None:
+        self.api = api
+        self.django_context = django_context
 
 
 class Metadata:
     @dataclasses.dataclass(frozen=True)
     class ConcreteChildren:
-        info: TypeInfo
         children: list[str]
         _lookup_fully_qualified: Callable[[str], SymbolTableNode | None]
+        _django_context: DjangoContext
 
         def add_child(self, name: str) -> None:
             if name not in self.children:
@@ -49,6 +70,36 @@ class Metadata:
             if reviewed != self.children:
                 self.children.clear()
                 self.children.extend(reviewed)
+
+        def make_one_queryset(
+            self,
+            api: SemanticAnalyzer | TypeChecker,
+            instance: Instance,
+        ) -> Instance:
+            model_cls = self._django_context.get_model_class_by_fullname(instance.type.fullname)
+            assert model_cls is not None
+            manager = model_cls._default_manager
+            manager_info: TypeInfo | None
+
+            if isinstance(manager, Manager):
+                manager_fullname = helpers.get_class_fullname(manager.__class__)
+                manager_info = helpers.lookup_fully_qualified_typeinfo(api, manager_fullname)
+
+                add_managers = CustomizedAddManagers(api=api, django_context=self._django_context)
+                manager_info = add_managers.get_dynamic_manager(manager_fullname, manager)
+
+            if manager_info is None:
+                found = self._lookup_fully_qualified(fullnames.QUERYSET_CLASS_FULLNAME)
+                assert found is not None
+                manager_type = instance.type.names["_default_manager"].node.type
+                return Instance(found.node, manager_type.args)
+
+            metadata = helpers.get_django_metadata(manager_info)
+            queryset_fullname = metadata["from_queryset_manager"]
+            queryset = self._lookup_fully_qualified(queryset_fullname)
+            assert queryset is not None
+            assert not queryset.node.is_generic()
+            return Instance(queryset.node, [])
 
         def instances(self, api: SemanticAnalyzer) -> list[Instance]:
             concrete: list[Instance] = []
@@ -69,7 +120,18 @@ class Metadata:
 
             return concrete
 
-    def __init__(self, lookup_fully_qualified: Callable[[str], SymbolTableNode | None]) -> None:
+        def querysets(self, api: SemanticAnalyzer) -> list[Instance]:
+            querysets: list[Instance] = []
+            for instance in self.instances(api):
+                querysets.append(self.make_one_queryset(api, instance))
+            return querysets
+
+    def __init__(
+        self,
+        lookup_fully_qualified: Callable[[str], SymbolTableNode | None],
+        django_context: DjangoContext,
+    ) -> None:
+        self._django_context = django_context
         self._metadata: dict[str, dict[str, object]] = {}
         self._lookup_fully_qualified = lookup_fully_qualified
 
@@ -104,7 +166,9 @@ class Metadata:
         children = metadata["concrete_children"]
         assert isinstance(children, list)
         return self.ConcreteChildren(
-            info=info, children=children, _lookup_fully_qualified=self._lookup_fully_qualified
+            children=children,
+            _lookup_fully_qualified=self._lookup_fully_qualified,
+            _django_context=self._django_context,
         )
 
     def fill_out_concrete_children(self, fullname: str) -> None:
@@ -139,6 +203,39 @@ class Metadata:
         concrete = self.concrete_for(type_arg.type).instances(ctx.api.api)
         return get_proper_type(UnionType(tuple(concrete)))
 
+    def find_concrete_querysets(self, ctx: AnalyzeTypeContext) -> ProperType:
+        args = ctx.type.args
+        type_arg = ctx.api.analyze_type(args[0])
+
+        assert isinstance(ctx.api, TypeAnalyser)
+        assert isinstance(ctx.api.api, SemanticAnalyzer)
+
+        if not isinstance(type_arg, Instance | TypeVarType):
+            return get_proper_type(UnionType(()))
+
+        if helpers.is_annotated_model_fullname(type_arg.type.fullname):
+            # If it's already a generated class, we want to use the original model as a base
+            type_arg = type_arg.type.bases[0]
+
+        concrete = self.concrete_for(type_arg.type).querysets(ctx.api.api)
+        return get_proper_type(UnionType(tuple(concrete)))
+
+    def find_default_queryset(self, ctx: AnalyzeTypeContext) -> ProperType:
+        args = ctx.type.args
+        type_arg = ctx.api.analyze_type(args[0])
+
+        if isinstance(type_arg, TypeVarType):
+            breakpoint()
+            raise AssertionError("TODO")
+        else:
+            return get_proper_type(
+                self.ConcreteChildren(
+                    children=[],
+                    _lookup_fully_qualified=self._lookup_fully_qualified,
+                    _django_context=self._django_context,
+                ).make_one_queryset(ctx.api.api, ctx.api.api.named_type(type_arg.type.fullname))
+            )
+
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         assert isinstance(ctx.call, CallExpr)
         assert isinstance(ctx.call.args[0], StrExpr)
@@ -161,17 +258,49 @@ class Metadata:
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
 
+    def extended_get_attribute_resolve_manager_method(self, ctx: AttributeContext) -> ProperType:
+        # Copy from original resolve_manager_method
+
+        if not isinstance(ctx.default_attr_type, AnyType):
+            return ctx.default_attr_type
+        elif ctx.default_attr_type.type_of_any != TypeOfAny.implementation_artifact:
+            return ctx.default_attr_type
+
+        if not isinstance(ctx.type, UnionType):
+            return resolve_manager_method(ctx)
+
+        method_name: str | None = None
+        if isinstance(ctx.context, MemberExpr):
+            method_name = ctx.context.name
+        elif isinstance(ctx.context, CallExpr) and isinstance(ctx.context.callee, MemberExpr):
+            method_name = ctx.context.callee.name
+
+        if method_name is None:
+            return resolve_manager_method(ctx)
+
+        resolved = [
+            resolve_manager_method_from_instance(
+                instance=instance, method_name=method_name, ctx=ctx
+            )
+            for instance in ctx.type.items
+        ]
+        return get_proper_type(UnionType(tuple(resolved)))
+
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: main.Options):
         super().__init__(options)
-        self.metadata = Metadata(self.lookup_fully_qualified)
+        self.metadata = Metadata(self.lookup_fully_qualified, django_context=self.django_context)
 
     def get_type_analyze_hook(
         self, fullname: str
     ) -> Callable[[AnalyzeTypeContext], MypyType] | None:
         if fullname == "djangomypytest.mypy_plugin.annotations.Concrete":
             return self.metadata.find_concrete_models
+        elif fullname == "djangomypytest.mypy_plugin.annotations.ConcreteQuerySet":
+            return self.metadata.find_concrete_querysets
+        elif fullname == "djangomypytest.mypy_plugin.annotations.DefaultQuerySet":
+            return self.metadata.find_default_queryset
         else:
             return super().get_type_analyze_hook(fullname)
 
@@ -190,6 +319,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             if info and info.has_base("djangomypytest.mypy_plugin.annotations.Concrete"):
                 return self.metadata.transform_type_var_classmethod
         return super().get_dynamic_class_hook(fullname)
+
+    def get_attribute_hook(self, fullname: str) -> Callable[[AttributeContext], MypyType] | None:
+        super_hook = super().get_attribute_hook(fullname)
+        if super_hook is resolve_manager_method:
+            return self.metadata.extended_get_attribute_resolve_manager_method
+        else:
+            return super_hook
 
 
 if hasattr(helpers, "is_abstract_model"):
