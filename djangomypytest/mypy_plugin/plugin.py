@@ -46,7 +46,7 @@ from mypy_django_plugin.transformers.managers import (
 )
 from mypy_django_plugin.transformers.models import AddManagers
 
-MYPY_VERSION_TUPLE = (1, 9)
+MYPY_VERSION_TUPLE: tuple[int, int]
 
 
 class FailFunction(Protocol):
@@ -454,4 +454,7 @@ else:
 
 
 def plugin(version: str) -> type[ExtendedMypyStubs]:
+    global MYPY_VERSION_TUPLE
+    major, minor, _ = version.split(".", 2)
+    MYPY_VERSION_TUPLE = (int(major), int(minor))
     return ExtendedMypyStubs
