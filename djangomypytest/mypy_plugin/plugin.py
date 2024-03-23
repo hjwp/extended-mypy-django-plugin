@@ -337,20 +337,27 @@ class Metadata:
         elif isinstance(ctx.context, CallExpr) and isinstance(ctx.context.callee, MemberExpr):
             method_name = ctx.context.callee.name
 
-        if method_name is None:
-            return resolve_manager_method(ctx)
+        if method_name is None or not all(
+            isinstance(instance, Instance) for instance in ctx.type.items
+        ):
+            ctx.api.fail(
+                f'Unable to resolve return type of queryset/manager method "{method_name}"',
+                ctx.context,
+            )
+            return AnyType(TypeOfAny.from_error)
 
-        resolved = [
+        resolved = tuple(
             resolve_manager_method_from_instance(
                 instance=instance, method_name=method_name, ctx=ctx
             )
             for instance in ctx.type.items
-        ]
-        return get_proper_type(UnionType(tuple(resolved)))
+            if isinstance(instance, Instance)
+        )
+        return get_proper_type(UnionType(resolved))
 
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
-    def __init__(self, options: main.Options):
+    def __init__(self, options: main.Options) -> None:
         super().__init__(options)
         self.metadata = Metadata(self.lookup_fully_qualified, django_context=self.django_context)
 
@@ -446,5 +453,5 @@ else:
         return False
 
 
-def plugin(version):
+def plugin(version: str) -> type[ExtendedMypyStubs]:
     return ExtendedMypyStubs
