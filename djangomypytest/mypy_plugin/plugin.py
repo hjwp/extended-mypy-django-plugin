@@ -281,10 +281,20 @@ class Metadata:
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         assert isinstance(ctx.call, CallExpr)
         assert isinstance(ctx.call.args[0], StrExpr)
-        assert isinstance(ctx.call.args[1], NameExpr)
-
         name = ctx.call.args[0].value
-        parent = ctx.call.args[1].node
+
+        if isinstance(ctx.call.args[1], NameExpr):
+            parent = ctx.call.args[1].node
+        elif isinstance(ctx.call.args[1], StrExpr):
+            sym = self._lookup_fully_qualified(
+                ctx.api.modules[ctx.api.scope.module].fullname + "." + ctx.call.args[1].value
+            )
+            assert sym is not None
+            parent = sym.node
+        else:
+            ctx.api.fail("Concrete.type_var must take the parent class as second argument")
+            return
+
         assert isinstance(parent, TypeInfo)
         assert isinstance(ctx.api, SemanticAnalyzer)
 
