@@ -46,6 +46,8 @@ from mypy_django_plugin.transformers.managers import (
 )
 from mypy_django_plugin.transformers.models import AddManagers
 
+MYPY_VERSION_TUPLE = (1, 9)
+
 
 class FailFunction(Protocol):
     def __call__(self, reason: str) -> None: ...
@@ -299,13 +301,21 @@ class Metadata:
         assert isinstance(ctx.api, SemanticAnalyzer)
 
         object_type = ctx.api.named_type("builtins.object")
-        type_var_expr = TypeVarExpr(
-            name=name,
-            fullname=f"{ctx.api.cur_mod_id}.{name}",
-            values=self.concrete_for(parent).instances(ctx.api),
-            upper_bound=object_type,
-            default=AnyType(TypeOfAny.from_omitted_generics),
-        )
+        if MYPY_VERSION_TUPLE >= (1, 4):
+            type_var_expr = TypeVarExpr(
+                name=name,
+                fullname=f"{ctx.api.cur_mod_id}.{name}",
+                values=self.concrete_for(parent).instances(ctx.api),
+                upper_bound=object_type,
+                default=AnyType(TypeOfAny.from_omitted_generics),
+            )
+        else:
+            type_var_expr = TypeVarExpr(
+                name=name,
+                fullname=f"{ctx.api.cur_mod_id}.{name}",
+                values=self.concrete_for(parent).instances(ctx.api),
+                upper_bound=object_type,
+            )
         module = ctx.api.modules[ctx.api.cur_mod_id]
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
