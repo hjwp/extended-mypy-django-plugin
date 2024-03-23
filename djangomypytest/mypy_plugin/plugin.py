@@ -1,5 +1,7 @@
 import dataclasses
+import functools
 from collections.abc import Callable
+from typing import Protocol
 
 from django.db.models import Manager
 from mypy.checker import TypeChecker
@@ -7,6 +9,7 @@ from mypy.nodes import (
     GDEF,
     AssignmentStmt,
     CallExpr,
+    FuncDef,
     MemberExpr,
     NameExpr,
     StrExpr,
@@ -19,6 +22,7 @@ from mypy.plugin import (
     AttributeContext,
     ClassDefContext,
     DynamicClassDefContext,
+    FunctionContext,
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
@@ -43,6 +47,10 @@ from mypy_django_plugin.transformers.managers import (
 from mypy_django_plugin.transformers.models import AddManagers
 
 
+class FailFunction(Protocol):
+    def __call__(self, reason: str) -> None: ...
+
+
 class CustomizedAddManagers(AddManagers):
     def __init__(self, api: SemanticAnalyzer | TypeChecker, django_context: DjangoContext) -> None:
         self.api = api
@@ -55,6 +63,7 @@ class Metadata:
         children: list[str]
         _lookup_fully_qualified: Callable[[str], SymbolTableNode | None]
         _django_context: DjangoContext
+        _fail_function: FailFunction
 
         def add_child(self, name: str) -> None:
             if name not in self.children:
@@ -74,9 +83,9 @@ class Metadata:
         def make_one_queryset(
             self,
             api: SemanticAnalyzer | TypeChecker,
-            instance: Instance,
+            info: TypeInfo,
         ) -> Instance:
-            model_cls = self._django_context.get_model_class_by_fullname(instance.type.fullname)
+            model_cls = self._django_context.get_model_class_by_fullname(info.fullname)
             assert model_cls is not None
             manager = model_cls._default_manager
             manager_info: TypeInfo | None
@@ -91,8 +100,16 @@ class Metadata:
             if manager_info is None:
                 found = self._lookup_fully_qualified(fullnames.QUERYSET_CLASS_FULLNAME)
                 assert found is not None
-                manager_type = instance.type.names["_default_manager"].node.type
-                return Instance(found.node, manager_type.args)
+                if "_default_manager" not in info.names:
+                    try:
+                        concrete = api.named_type(info.fullname)
+                    except AssertionError:
+                        concrete = AnyType(TypeOfAny.from_omitted_generics)
+                        self._fail_function("dmypy likely needs to be restarted")
+                    return Instance(found.node, (concrete,))
+                else:
+                    manager_type = info.names["_default_manager"].node.type
+                    return Instance(found.node, manager_type.args)
 
             metadata = helpers.get_django_metadata(manager_info)
             queryset_fullname = metadata["from_queryset_manager"]
@@ -123,7 +140,7 @@ class Metadata:
         def querysets(self, api: SemanticAnalyzer) -> list[Instance]:
             querysets: list[Instance] = []
             for instance in self.instances(api):
-                querysets.append(self.make_one_queryset(api, instance))
+                querysets.append(self.make_one_queryset(api, instance.type))
             return querysets
 
     def __init__(
@@ -134,6 +151,8 @@ class Metadata:
         self._django_context = django_context
         self._metadata: dict[str, dict[str, object]] = {}
         self._lookup_fully_qualified = lookup_fully_qualified
+
+        self._registered_for_function_hook: set[str] = set()
 
     def sync_metadata(self, info: TypeInfo) -> None:
         on_info = info.metadata.get("django_extended")
@@ -169,7 +188,14 @@ class Metadata:
             children=children,
             _lookup_fully_qualified=self._lookup_fully_qualified,
             _django_context=self._django_context,
+            _fail_function=lambda s: None,
         )
+
+    def register_for_function_hook(self, node: SymbolTableNode) -> None:
+        self._registered_for_function_hook.add(node.fullname)
+
+    def registered_for_function_hook(self, node: SymbolTableNode) -> bool:
+        return node.fullname in self._registered_for_function_hook
 
     def fill_out_concrete_children(self, fullname: str) -> None:
         if not fullname:
@@ -225,16 +251,32 @@ class Metadata:
         type_arg = ctx.api.analyze_type(args[0])
 
         if isinstance(type_arg, TypeVarType):
-            breakpoint()
-            raise AssertionError("TODO")
+            func = self._lookup_fully_qualified(ctx.api.api.scope.current_target())
+            assert func is not None
+            self.register_for_function_hook(func.node)
+            return get_proper_type(ctx.type)
         else:
             return get_proper_type(
                 self.ConcreteChildren(
                     children=[],
                     _lookup_fully_qualified=self._lookup_fully_qualified,
                     _django_context=self._django_context,
-                ).make_one_queryset(ctx.api.api, ctx.api.api.named_type(type_arg.type.fullname))
+                    _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
+                ).make_one_queryset(ctx.api.api, type_arg.type)
             )
+
+    def modify_default_queryset_return_type(
+        self, ctx: FunctionContext, *, super_hook: Callable[[FunctionContext], None] | None
+    ) -> ProperType:
+        type_value = ctx.arg_types[0][0].type_object()
+        return get_proper_type(
+            self.ConcreteChildren(
+                children=[],
+                _lookup_fully_qualified=self._lookup_fully_qualified,
+                _django_context=self._django_context,
+                _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
+            ).make_one_queryset(ctx.api, type_value)
+        )
 
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         assert isinstance(ctx.call, CallExpr)
@@ -303,6 +345,20 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return self.metadata.find_default_queryset
         else:
             return super().get_type_analyze_hook(fullname)
+
+    def get_function_hook(self, fullname: str) -> Callable[[FunctionContext], MypyType] | None:
+        sym = self.lookup_fully_qualified(fullname)
+        if (
+            sym
+            and isinstance(sym.node, FuncDef)
+            and self.metadata.registered_for_function_hook(sym.node)
+        ):
+            return functools.partial(
+                self.metadata.modify_default_queryset_return_type,
+                super_hook=super().get_function_hook(fullname),
+            )
+        else:
+            return super().get_function_hook(fullname)
 
     def get_customize_class_mro_hook(
         self, fullname: str

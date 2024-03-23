@@ -22,6 +22,10 @@ def make_child2_queryset() -> DefaultQuerySet[Child2]:
     return Child2.objects.all()
 
 
+def make_child_typevar_queryset(child: type[T_Child]) -> DefaultQuerySet[T_Child]:
+    return child.objects.all()
+
+
 def ones(model: type[Concrete[Parent]]) -> list[str]:
     reveal_type(model.objects)
     return list(model.objects.values_list("one", flat=True))
@@ -42,5 +46,11 @@ def index(request: HttpRequest) -> HttpResponseBase:
     reveal_type(qs2.all())
     reveal_type(Child2.objects)
     reveal_type(Child2.objects.all())
+
+    tvqs1 = make_child_typevar_queryset(Child1)
+    reveal_type(tvqs1)
+
+    tvqs2 = make_child_typevar_queryset(Child2)
+    reveal_type(tvqs2)
 
     return HttpResponse("Hello there")
