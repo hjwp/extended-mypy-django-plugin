@@ -22,7 +22,7 @@ class Concrete(Generic[T_Parent]):
                 continue
             if not issubclass(model, parent):
                 continue
-            if hasattr(model, "Meta") and getattr(model.Meta, "is_abstract"):
+            if hasattr(model, "Meta") and getattr(model.Meta, "is_abstract", False):
                 continue
             found.append(model)
 
