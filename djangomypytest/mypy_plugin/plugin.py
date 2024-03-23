@@ -1,11 +1,28 @@
 import dataclasses
 from collections.abc import Callable
 
-from mypy.nodes import AssignmentStmt, NameExpr, SymbolTableNode, TypeInfo
-from mypy.plugin import AnalyzeTypeContext, ClassDefContext
+from mypy.nodes import (
+    GDEF,
+    AssignmentStmt,
+    CallExpr,
+    NameExpr,
+    StrExpr,
+    SymbolTableNode,
+    TypeInfo,
+    TypeVarExpr,
+)
+from mypy.plugin import AnalyzeTypeContext, ClassDefContext, DynamicClassDefContext
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import Instance, LiteralType, ProperType, UnionType, get_proper_type
+from mypy.types import (
+    AnyType,
+    Instance,
+    LiteralType,
+    ProperType,
+    TypeOfAny,
+    UnionType,
+    get_proper_type,
+)
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.lib import fullnames, helpers
@@ -122,6 +139,28 @@ class Metadata:
         concrete = self.concrete_for(type_arg.type).instances(ctx.api.api)
         return get_proper_type(UnionType(tuple(concrete)))
 
+    def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
+        assert isinstance(ctx.call, CallExpr)
+        assert isinstance(ctx.call.args[0], StrExpr)
+        assert isinstance(ctx.call.args[1], NameExpr)
+
+        name = ctx.call.args[0].value
+        parent = ctx.call.args[1].node
+        assert isinstance(parent, TypeInfo)
+        assert isinstance(ctx.api, SemanticAnalyzer)
+
+        object_type = ctx.api.named_type("builtins.object")
+        type_var_expr = TypeVarExpr(
+            name=name,
+            fullname=f"{ctx.api.cur_mod_id}.{name}",
+            values=self.concrete_for(parent).instances(ctx.api),
+            upper_bound=object_type,
+            default=AnyType(TypeOfAny.from_omitted_generics),
+        )
+        module = ctx.api.modules[ctx.api.cur_mod_id]
+        module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
+        return None
+
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: main.Options):
@@ -141,6 +180,16 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     ) -> Callable[[ClassDefContext], None] | None:
         self.metadata.fill_out_concrete_children(fullname)
         return super().get_customize_class_mro_hook(fullname)
+
+    def get_dynamic_class_hook(
+        self, fullname: str
+    ) -> Callable[[DynamicClassDefContext], None] | None:
+        class_name, _, method_name = fullname.rpartition(".")
+        if method_name == "type_var":
+            info = self._get_typeinfo_or_none(class_name)
+            if info and info.has_base("djangomypytest.mypy_plugin.annotations.Concrete"):
+                return self.metadata.transform_type_var_classmethod
+        return super().get_dynamic_class_hook(fullname)
 
 
 if hasattr(helpers, "is_abstract_model"):
