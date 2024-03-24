@@ -4,14 +4,9 @@ from .exampleapp.models import Child1, Child2, Parent
 from .mypy_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
 
 T_Child = Concrete.type_var("T_Child", Parent)
-T_ChildStr = Concrete.type_var("T_ChildStr", "Parent")
 
 
 def make_child(child: type[T_Child]) -> T_Child:
-    return child.objects.create()
-
-
-def make_child_str(child: type[T_ChildStr]) -> T_ChildStr:
     return child.objects.create()
 
 
@@ -41,10 +36,6 @@ def index(request: HttpRequest) -> HttpResponseBase:
     made = make_child(Child1)
     # djangomypytest.exampleapp.models.Child1
     reveal_type(made)
-
-    made_str = make_child(Child1)
-    # djangomypytest.exampleapp.models.Child1
-    reveal_type(made_str)
 
     any_qs = make_any_queryset(Child1)
     # Union[django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child1], djangomypytest.exampleapp.models.Child2QuerySet, django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child3]]

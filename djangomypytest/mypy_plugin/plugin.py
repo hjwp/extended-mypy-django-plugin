@@ -282,21 +282,29 @@ class Metadata:
 
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         assert isinstance(ctx.call, CallExpr)
-        assert isinstance(ctx.call.args[0], StrExpr)
-        name = ctx.call.args[0].value
-
-        if isinstance(ctx.call.args[1], NameExpr):
-            parent = ctx.call.args[1].node
-        elif isinstance(ctx.call.args[1], StrExpr):
-            sym = self._lookup_fully_qualified(
-                ctx.api.modules[ctx.api.scope.module].fullname + "." + ctx.call.args[1].value
+        if not isinstance(ctx.call.args[0], StrExpr):
+            ctx.api.fail(
+                "First argument to Concrete.type_var must be a string of the name of the variable",
+                ctx.call,
             )
-            assert sym is not None
-            parent = sym.node
-        else:
-            ctx.api.fail("Concrete.type_var must take the parent class as second argument")
             return
 
+        name = ctx.call.args[0].value
+        if name != ctx.name:
+            ctx.api.fail(
+                f"First argument {name} was not the name of the variable {ctx.name}",
+                ctx.call,
+            )
+            return
+
+        if not isinstance(ctx.call.args[1], NameExpr):
+            ctx.api.fail(
+                "Second argument to Concrete.type_var must be the abstract model class to find concrete instances of",
+                ctx.call,
+            )
+            return
+
+        parent = ctx.call.args[1].node
         assert isinstance(parent, TypeInfo)
         assert isinstance(ctx.api, SemanticAnalyzer)
 
