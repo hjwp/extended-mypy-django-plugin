@@ -32,6 +32,7 @@ from mypy.types import (
     LiteralType,
     ProperType,
     TypeOfAny,
+    TypeType,
     TypeVarType,
     UnionType,
     get_proper_type,
@@ -83,13 +84,15 @@ class Metadata:
                 self.children.extend(reviewed)
 
         def make_one_queryset(
-            self,
-            api: SemanticAnalyzer | TypeChecker,
-            info: TypeInfo,
+            self, api: SemanticAnalyzer | TypeChecker, info: TypeInfo
         ) -> Instance:
             model_cls = self._django_context.get_model_class_by_fullname(info.fullname)
             assert model_cls is not None
             manager = model_cls._default_manager
+            if manager is None:
+                self._fail_function("Cannot make a queryset for an abstract model")
+                return AnyType(TypeOfAny.from_error)
+
             manager_info: TypeInfo | None
 
             if isinstance(manager, Manager):
@@ -106,12 +109,15 @@ class Metadata:
                     try:
                         concrete = api.named_type(info.fullname)
                     except AssertionError:
-                        concrete = AnyType(TypeOfAny.from_omitted_generics)
+                        concrete = AnyType(TypeOfAny.from_error)
                         self._fail_function("dmypy likely needs to be restarted")
-                    return Instance(found.node, (concrete,))
+                    return Instance(found.node, (concrete, concrete))
                 else:
                     manager_type = info.names["_default_manager"].node.type
-                    return Instance(found.node, manager_type.args)
+                    args = manager_type.args
+                    if len(args) == 1:
+                        args = (args[0], args[0])
+                    return Instance(found.node, args)
 
             metadata = helpers.get_django_metadata(manager_info)
             queryset_fullname = metadata["from_queryset_manager"]
@@ -258,6 +264,10 @@ class Metadata:
             self.register_for_function_hook(func.node)
             return get_proper_type(ctx.type)
         else:
+            if isinstance(type_arg, AnyType):
+                ctx.api.fail("Can't get default query set for Any", ctx.context)
+                return ctx.type
+
             return get_proper_type(
                 self.ConcreteChildren(
                     children=[],
@@ -270,14 +280,45 @@ class Metadata:
     def modify_default_queryset_return_type(
         self, ctx: FunctionContext, *, super_hook: Callable[[FunctionContext], None] | None
     ) -> ProperType:
-        type_value = ctx.arg_types[0][0].type_object()
+        func = ctx.api.lookup_type(ctx.context.callee)
+        func_def = ctx.api.expr_checker.analyze_ref_expr(ctx.context.callee)
+        type_var = func.ret_type.args[0]
+
+        arg_value: MypyType | None = None
+        for arg in func_def.formal_arguments():
+            arg_type = arg.typ
+            if isinstance(arg_type, TypeType):
+                arg_type = arg_type.item
+
+            if isinstance(arg_type, TypeVarType) and arg_type.name == type_var.name:
+                arg_value = func.argument_by_name(arg.name).typ
+                break
+
+        if arg_value is None:
+            ctx.api.fail("Can't work out what value to bind the return type to", ctx.context)
+            return AnyType(TypeOfAny.from_error)
+
+        if isinstance(arg_value, UnionType):
+            concrete = self.ConcreteChildren(
+                children=[item.item.type.fullname for item in arg.items],
+                _lookup_fully_qualified=self._lookup_fully_qualified,
+                _django_context=self._django_context,
+                _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
+            ).querysets(ctx.api)
+            return get_proper_type(UnionType(tuple(concrete)))
+
+        if isinstance(arg_value, TypeType):
+            arg_value = arg_value.item
+
+        assert isinstance(arg_value, Instance)
+
         return get_proper_type(
             self.ConcreteChildren(
                 children=[],
                 _lookup_fully_qualified=self._lookup_fully_qualified,
                 _django_context=self._django_context,
                 _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
-            ).make_one_queryset(ctx.api, type_value)
+            ).make_one_queryset(ctx.api, arg_value.type)
         )
 
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
@@ -297,15 +338,24 @@ class Metadata:
             )
             return
 
-        if not isinstance(ctx.call.args[1], NameExpr):
+        module = ctx.api.modules[ctx.api.cur_mod_id]
+        if isinstance(module.names.get(name), TypeVarType):
+            return
+
+        parent: SymbolTableNode | None = None
+        try:
+            parent = ctx.api.lookup_type_node(ctx.call.args[1])
+        except AssertionError:
+            parent = None
+
+        if parent is None:
             ctx.api.fail(
                 "Second argument to Concrete.type_var must be the abstract model class to find concrete instances of",
                 ctx.call,
             )
             return
 
-        parent = ctx.call.args[1].node
-        assert isinstance(parent, TypeInfo)
+        assert isinstance(parent.node, TypeInfo)
         assert isinstance(ctx.api, SemanticAnalyzer)
 
         object_type = ctx.api.named_type("builtins.object")
@@ -313,7 +363,7 @@ class Metadata:
             type_var_expr = TypeVarExpr(
                 name=name,
                 fullname=f"{ctx.api.cur_mod_id}.{name}",
-                values=self.concrete_for(parent).instances(ctx.api),
+                values=self.concrete_for(parent.node).instances(ctx.api),
                 upper_bound=object_type,
                 default=AnyType(TypeOfAny.from_omitted_generics),
             )
@@ -321,10 +371,10 @@ class Metadata:
             type_var_expr = TypeVarExpr(
                 name=name,
                 fullname=f"{ctx.api.cur_mod_id}.{name}",
-                values=self.concrete_for(parent).instances(ctx.api),
+                values=self.concrete_for(parent.node).instances(ctx.api),
                 upper_bound=object_type,
             )
-        module = ctx.api.modules[ctx.api.cur_mod_id]
+
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
 
