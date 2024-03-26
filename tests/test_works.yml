@@ -1,0 +1,4 @@
+- case: mypy_path_from_env
+  main: |
+    instance: int
+    reveal_type(instance)  # N: Revealed type is "builtins.int"

@@ -78,6 +78,10 @@ class App:
 
         run(bin_dir / "mypy", *args)
 
+    @command
+    def tests(self, bin_dir: Path, args: list[str]) -> None:
+        run(bin_dir / "pytest", *args)
+
 
 app = App()
 

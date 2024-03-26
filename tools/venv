@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import runpy
 from pathlib import Path
 
@@ -19,8 +20,15 @@ manager.add_local_dep(
     "..",
     version_file=("djangomypytest", "version.py"),
     name="djangomypytest=={version}",
+    with_tests=True,
 )
 
-manager.add_requirements_file("{here}", "requirements.dev.txt")
-manager.min_python("3.10")
+if "TOX_PYTHON" in os.environ:
+    folder = Path(os.environ["TOX_PYTHON"]).parent.parent
+    manager.place_venv_in(folder.parent)
+    manager.named(folder.name)
+else:
+    manager.add_requirements_file("{here}", "requirements.dev.txt")
+    manager.min_python("3.10")
+
 manager.run()
