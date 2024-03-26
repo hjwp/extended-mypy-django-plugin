@@ -422,11 +422,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def get_type_analyze_hook(
         self, fullname: str
     ) -> Callable[[AnalyzeTypeContext], MypyType] | None:
-        if fullname == "djangomypytest.mypy_plugin.annotations.Concrete":
+        if fullname == "extended_mypy_django_plugin.annotations.Concrete":
             return self.metadata.find_concrete_models
-        elif fullname == "djangomypytest.mypy_plugin.annotations.ConcreteQuerySet":
+        elif fullname == "extended_mypy_django_plugin.annotations.ConcreteQuerySet":
             return self.metadata.find_concrete_querysets
-        elif fullname == "djangomypytest.mypy_plugin.annotations.DefaultQuerySet":
+        elif fullname == "extended_mypy_django_plugin.annotations.DefaultQuerySet":
             return self.metadata.find_default_queryset
         else:
             return super().get_type_analyze_hook(fullname)
@@ -457,7 +457,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         class_name, _, method_name = fullname.rpartition(".")
         if method_name == "type_var":
             info = self._get_typeinfo_or_none(class_name)
-            if info and info.has_base("djangomypytest.mypy_plugin.annotations.Concrete"):
+            if info and info.has_base("extended_mypy_django_plugin.annotations.Concrete"):
                 return self.metadata.transform_type_var_classmethod
         return super().get_dynamic_class_hook(fullname)
 

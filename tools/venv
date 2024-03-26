@@ -18,8 +18,8 @@ manager = manager(run).named(".python")
 manager.add_local_dep(
     "{here}",
     "..",
-    version_file=("djangomypytest", "version.py"),
-    name="djangomypytest=={version}",
+    version_file=("extended_mypy_django_plugin", "version.py"),
+    name="extended_mypy_django_plugin=={version}",
     with_tests=True,
 )
 

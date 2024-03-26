@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "djangomypytest"
+name = "extended_mypy_django_plugin"
 dynamic = ["version"]
 description = "Trying to make mypy understand .objects on abstract django models"
 readme = "README.rst"
@@ -24,11 +24,11 @@ tests = [
 ]
 
 [tool.hatch.version]
-path = "djangomypytest/version.py"
+path = "extended_mypy_django_plugin/version.py"
 
 [tool.hatch.build.targets.wheel]
 include = [
-    "/djangomypytest",
+    "/extended_mypy_django_plugin",
 ]
 
 [tool.ruff]
@@ -40,7 +40,6 @@ extend-exclude = [
     "tools/.python",
     "tools/deps",
     "__pycache__",
-    "djangomypytest/exampleapp/migrations",
 ]
 
 [tool.ruff.lint]
@@ -53,18 +52,3 @@ select = [
     "RUF",
     "F",
 ]
-
-[tool.mypy]
-exclude = [
-    ".DS_Store",
-    ".pytest_cache",
-    "tools/.python",
-    "tools/deps",
-    "__pycache__",
-]
-plugins = [
-    "djangomypytest.mypy_plugin.plugin"
-]
-
-[tool.django-stubs]
-django_settings_module = "djangomypytest.settings"

@@ -1,21 +1,76 @@
 - case: mypy_path_from_env
+  disable_cache: true
   out: |
-     main:30: note: Revealed type is "Union[django.db.models.manager.Manager[djangomypytest.exampleapp.models.Child1], djangomypytest.exampleapp.models.ManagerFromChild2QuerySet[djangomypytest.exampleapp.models.Child2], django.db.models.manager.Manager[djangomypytest.exampleapp.models.Child3]]"
-     main:36: note: Revealed type is "djangomypytest.exampleapp.models.Child1"
-     main:39: note: Revealed type is "Union[django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child1, djangomypytest.exampleapp.models.Child1], djangomypytest.exampleapp.models.Child2QuerySet, django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child3, djangomypytest.exampleapp.models.Child3]]"
-     main:42: note: Revealed type is "django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child1, djangomypytest.exampleapp.models.Child1]"
-     main:45: note: Revealed type is "djangomypytest.exampleapp.models.Child2QuerySet"
-     main:46: note: Revealed type is "djangomypytest.exampleapp.models.Child2QuerySet"
-     main:47: note: Revealed type is "djangomypytest.exampleapp.models.ManagerFromChild2QuerySet[djangomypytest.exampleapp.models.Child2]"
-     main:48: note: Revealed type is "djangomypytest.exampleapp.models.Child2QuerySet[djangomypytest.exampleapp.models.Child2]"
-     main:51: note: Revealed type is "django.db.models.query._QuerySet[djangomypytest.exampleapp.models.Child1, djangomypytest.exampleapp.models.Child1]"
-     main:54: note: Revealed type is "djangomypytest.exampleapp.models.Child2QuerySet"
+     main:33: note: Revealed type is "Union[django.db.models.manager.Manager[myapp.models.Child1], myapp.models.ManagerFromChild2QuerySet[myapp.models.Child2], django.db.models.manager.Manager[myapp.models.Child3]]"
+     main:38: note: Revealed type is "myapp.models.Child1"
+     main:41: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3]]"
+     main:44: note: Revealed type is "django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1]"
+     main:48: note: Revealed type is "myapp.models.Child2QuerySet"
+     main:49: note: Revealed type is "myapp.models.ManagerFromChild2QuerySet[myapp.models.Child2]"
+     main:50: note: Revealed type is "myapp.models.Child2QuerySet[myapp.models.Child2]"
+     main:53: note: Revealed type is "django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1]"
+     main:56: note: Revealed type is "myapp.models.Child2QuerySet"
+     main:59: note: Revealed type is "Union[myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1]]"
+  installed_apps:
+      - myapp
+  files:
+      - path: myapp/__init__.py
+      - path: myapp/models.py
+        content: |
+          from django.db import models
+          from typing import TYPE_CHECKING, cast
+          from extended_mypy_django_plugin import Concrete
+
+
+          class Parent(models.Model):
+              one = models.CharField(max_length=50)
+
+              class Meta:
+                  abstract = True
+
+
+          if TYPE_CHECKING:
+              _Parent_concrete = cast(Concrete[Parent], None)
+              # This next line failing means you need to restart dmypy
+              _Parent_concrete.objects
+
+
+          class Child1(Parent):
+              two = models.CharField(max_length=60)
+
+
+          class Child2QuerySet(models.QuerySet["Child2"]):
+              pass
+
+
+          Child2Manager = models.Manager.from_queryset(Child2QuerySet)
+
+
+          class Child2(Parent):
+              two = models.CharField(max_length=60)
+              four = models.CharField(max_length=1)
+
+              three = models.CharField(max_length=70)
+
+              objects = Child2Manager()
+
+
+          class Parent2(Parent):
+              three = models.CharField(max_length=50)
+
+              class Meta:
+                  abstract = True
+
+
+          class Child3(Parent2):
+              two = models.CharField(max_length=60)
+
+              three = models.CharField(max_length=70)
 
   main: |
-    from django.http import HttpRequest, HttpResponse, HttpResponseBase
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
 
-    from djangomypytest.exampleapp.models import Child1, Child2, Parent
-    from djangomypytest.mypy_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+    from myapp.models import Parent, Child1, Child2
 
     T_Child = Concrete.type_var("T_Child", Parent)
 
@@ -36,6 +91,10 @@
         return Child2.objects.all()
 
 
+    def make_multiple_queryset(child: type[Child1 | Child2]) -> DefaultQuerySet[Child2 | Child1]:
+        return child.objects.all()
+
+
     def make_child_typevar_queryset(child: type[T_Child]) -> DefaultQuerySet[T_Child]:
         return child.objects.all()
 
@@ -45,26 +104,26 @@
         return list(model.objects.values_list("one", flat=True))
 
 
-    def index(request: HttpRequest) -> HttpResponseBase:
-        made = make_child(Child1)
-        reveal_type(made)
+    made = make_child(Child1)
+    reveal_type(made)
 
-        any_qs = make_any_queryset(Child1)
-        reveal_type(any_qs)
+    any_qs = make_any_queryset(Child1)
+    reveal_type(any_qs)
 
-        qs1 = make_child1_queryset()
-        reveal_type(qs1)
+    qs1 = make_child1_queryset()
+    reveal_type(qs1)
 
-        qs2 = make_child2_queryset()
-        reveal_type(qs2)
-        reveal_type(qs2.all())
-        reveal_type(Child2.objects)
-        reveal_type(Child2.objects.all())
+    qs2 = make_child2_queryset()
+    reveal_type(qs2)
+    reveal_type(qs2.all())
+    reveal_type(Child2.objects)
+    reveal_type(Child2.objects.all())
 
-        tvqs1 = make_child_typevar_queryset(Child1)
-        reveal_type(tvqs1)
+    tvqs1 = make_child_typevar_queryset(Child1)
+    reveal_type(tvqs1)
 
-        tvqs2 = make_child_typevar_queryset(Child2)
-        reveal_type(tvqs2)
+    tvqs2 = make_child_typevar_queryset(Child2)
+    reveal_type(tvqs2)
 
-        return HttpResponse("Hello there")
+    tvqsmult = make_multiple_queryset(Child1)
+    reveal_type(tvqsmult)
