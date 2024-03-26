@@ -34,6 +34,7 @@ extend-exclude = [
     "tools/.python",
     "tools/deps",
     "__pycache__",
+    "djangomypytest/exampleapp/migrations",
 ]
 
 [tool.ruff.lint]
