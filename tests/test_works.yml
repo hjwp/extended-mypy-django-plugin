@@ -5,6 +5,7 @@
      main:38: note: Revealed type is "myapp.models.Child1"
      main:41: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3]]"
      main:44: note: Revealed type is "django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1]"
+     main:47: note: Revealed type is "myapp.models.Child2QuerySet"
      main:48: note: Revealed type is "myapp.models.Child2QuerySet"
      main:49: note: Revealed type is "myapp.models.ManagerFromChild2QuerySet[myapp.models.Child2]"
      main:50: note: Revealed type is "myapp.models.Child2QuerySet[myapp.models.Child2]"

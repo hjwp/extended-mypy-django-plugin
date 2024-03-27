@@ -30,4 +30,4 @@ jobs:
 
       - name: Run tests
         shell: bash
-        run: source ./run.sh activate && ./test.sh -v
+        run: ./test.sh -v
