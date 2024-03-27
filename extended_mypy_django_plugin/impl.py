@@ -1,6 +1,6 @@
 import dataclasses
 from collections.abc import Callable, Sequence
-from typing import Protocol, cast
+from typing import Any, Protocol
 
 from django.db.models import Manager
 from mypy.checker import TypeChecker
@@ -45,17 +45,10 @@ from mypy_django_plugin.transformers.managers import (
     resolve_manager_method,
     resolve_manager_method_from_instance,
 )
-from mypy_django_plugin.transformers.models import AddManagers
 
 
 class FailFunction(Protocol):
     def __call__(self, reason: str) -> None: ...
-
-
-class CustomizedAddManagers(AddManagers):
-    def __init__(self, api: SemanticAnalyzer | TypeChecker, django_context: DjangoContext) -> None:
-        self.api = cast(SemanticAnalyzer, api)
-        self.django_context = django_context
 
 
 class Metadata:
@@ -81,6 +74,27 @@ class Metadata:
                 self.children.clear()
                 self.children.extend(reviewed)
 
+        def get_dynamic_manager(
+            self, api: TypeChecker | SemanticAnalyzer, fullname: str, manager: "Manager[Any]"
+        ) -> TypeInfo | None:
+            base_manager_fullname = helpers.get_class_fullname(manager.__class__.__bases__[0])
+            base_manager_info = helpers.lookup_fully_qualified_typeinfo(api, base_manager_fullname)
+
+            generated_managers: dict[str, str]
+            if (
+                base_manager_info is None
+                or "from_queryset_managers" not in base_manager_info.metadata
+            ):
+                generated_managers = {}
+            else:
+                generated_managers = base_manager_info.metadata["from_queryset_managers"]
+
+            generated_manager_name: str | None = generated_managers.get(fullname)
+            if generated_manager_name is None:
+                return None
+
+            return helpers.lookup_fully_qualified_typeinfo(api, generated_manager_name)
+
         def make_one_queryset(
             self, api: SemanticAnalyzer | TypeAnalyser | TypeChecker, info: TypeInfo
         ) -> Instance:
@@ -101,12 +115,8 @@ class Metadata:
                     sem_api = api.api
                 else:
                     sem_api = api
-                manager_info = helpers.lookup_fully_qualified_typeinfo(sem_api, manager_fullname)
 
-                add_managers = CustomizedAddManagers(
-                    api=sem_api, django_context=self._django_context
-                )
-                manager_info = add_managers.get_dynamic_manager(manager_fullname, manager)
+                manager_info = self.get_dynamic_manager(sem_api, manager_fullname, manager)
 
             if manager_info is None:
                 found = self._lookup_fully_qualified(fullnames.QUERYSET_CLASS_FULLNAME)
