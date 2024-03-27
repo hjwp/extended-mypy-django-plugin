@@ -41,7 +41,7 @@ from mypy_django_plugin.transformers.managers import (
 from . import concrete_children, fullnames, helpers
 
 
-class Metadata:
+class Actions:
     def __init__(
         self,
         lookup_fully_qualified: Callable[[str], SymbolTableNode | None],

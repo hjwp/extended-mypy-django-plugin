@@ -13,7 +13,7 @@ from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.transformers.managers import resolve_manager_method
 
-from . import impl
+from . import actions
 
 MYPY_VERSION_TUPLE: tuple[int, int]
 
@@ -21,7 +21,7 @@ MYPY_VERSION_TUPLE: tuple[int, int]
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: main.Options) -> None:
         super().__init__(options)
-        self.metadata = impl.Metadata(
+        self.actions = actions.Actions(
             self.lookup_fully_qualified,
             django_context=self.django_context,
             mypy_version=MYPY_VERSION_TUPLE,
@@ -31,11 +31,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         self, fullname: str
     ) -> Callable[[AnalyzeTypeContext], MypyType] | None:
         if fullname == "extended_mypy_django_plugin.annotations.Concrete":
-            return self.metadata.find_concrete_models
+            return self.actions.find_concrete_models
         elif fullname == "extended_mypy_django_plugin.annotations.ConcreteQuerySet":
-            return self.metadata.find_concrete_querysets
+            return self.actions.find_concrete_querysets
         elif fullname == "extended_mypy_django_plugin.annotations.DefaultQuerySet":
-            return self.metadata.find_default_queryset
+            return self.actions.find_default_queryset
         else:
             return super().get_type_analyze_hook(fullname)
 
@@ -44,10 +44,10 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if (
             sym
             and isinstance(sym.node, FuncDef)
-            and self.metadata.registered_for_function_hook(sym.node)
+            and self.actions.registered_for_function_hook(sym.node)
         ):
             return functools.partial(
-                self.metadata.modify_default_queryset_return_type,
+                self.actions.modify_default_queryset_return_type,
                 super_hook=super().get_function_hook(fullname),
             )
         else:
@@ -56,7 +56,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def get_customize_class_mro_hook(
         self, fullname: str
     ) -> Callable[[ClassDefContext], None] | None:
-        self.metadata.fill_out_concrete_children(fullname)
+        self.actions.fill_out_concrete_children(fullname)
         return super().get_customize_class_mro_hook(fullname)
 
     def get_dynamic_class_hook(
@@ -66,13 +66,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if method_name == "type_var":
             info = self._get_typeinfo_or_none(class_name)
             if info and info.has_base("extended_mypy_django_plugin.annotations.Concrete"):
-                return self.metadata.transform_type_var_classmethod
+                return self.actions.transform_type_var_classmethod
         return super().get_dynamic_class_hook(fullname)
 
     def get_attribute_hook(self, fullname: str) -> Callable[[AttributeContext], MypyType] | None:
         super_hook = super().get_attribute_hook(fullname)
         if super_hook is resolve_manager_method:
-            return self.metadata.extended_get_attribute_resolve_manager_method
+            return self.actions.extended_get_attribute_resolve_manager_method
         else:
             return super_hook
 
