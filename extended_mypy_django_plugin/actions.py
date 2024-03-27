@@ -189,7 +189,7 @@ class Actions:
             )
 
     def modify_default_queryset_return_type(
-        self, ctx: FunctionContext, *, super_hook: Callable[[FunctionContext], None] | None
+        self, ctx: FunctionContext, *, super_hook: Callable[[FunctionContext], MypyType] | None
     ) -> ProperType:
         assert isinstance(ctx.api, TypeChecker)
         assert isinstance(ctx.context, CallExpr)
