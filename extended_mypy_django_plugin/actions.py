@@ -12,7 +12,6 @@ from mypy.nodes import (
     TypeVarExpr,
 )
 from mypy.plugin import (
-    AnalyzeTypeContext,
     AttributeContext,
     DynamicClassDefContext,
     FunctionContext,
@@ -114,29 +113,27 @@ class Actions:
 
         return None
 
-    def find_concrete_models(self, ctx: AnalyzeTypeContext) -> ProperType:
-        args = ctx.type.args
-        type_arg = ctx.api.analyze_type(args[0])
+    def find_concrete_models(
+        self, unbound_type: UnboundType, api: TypeAnalyser, sem_api: SemanticAnalyzer
+    ) -> ProperType:
+        args = unbound_type.args
+        type_arg = api.analyze_type(args[0])
 
         if not isinstance(type_arg, Instance):
             return get_proper_type(UnionType(()))
-
-        assert isinstance(ctx.api, TypeAnalyser)
-        assert isinstance(ctx.api.api, SemanticAnalyzer)
 
         if helpers.is_annotated_model_fullname(type_arg.type.fullname):
             # If it's already a generated class, we want to use the original model as a base
             type_arg = type_arg.type.bases[0]
 
-        concrete = self.concrete_for(type_arg.type).instances(ctx.api.api)
+        concrete = self.concrete_for(type_arg.type).instances(sem_api)
         return get_proper_type(UnionType(tuple(concrete)))
 
-    def find_concrete_querysets(self, ctx: AnalyzeTypeContext) -> ProperType:
-        args = ctx.type.args
-        type_arg = ctx.api.analyze_type(args[0])
-
-        assert isinstance(ctx.api, TypeAnalyser)
-        assert isinstance(ctx.api.api, SemanticAnalyzer)
+    def find_concrete_querysets(
+        self, unbound_type: UnboundType, api: TypeAnalyser, sem_api: SemanticAnalyzer
+    ) -> ProperType:
+        args = unbound_type.args
+        type_arg = api.analyze_type(args[0])
 
         if not isinstance(type_arg, Instance | TypeVarType):
             return get_proper_type(UnionType(()))
@@ -146,26 +143,25 @@ class Actions:
                 # If it's already a generated class, we want to use the original model as a base
                 type_arg = type_arg.type.bases[0]
 
-        concrete = self.concrete_for(type_arg.type).querysets(ctx.api.api)
+        concrete = self.concrete_for(type_arg.type).querysets(sem_api)
         return get_proper_type(UnionType(tuple(concrete)))
 
-    def find_default_queryset(self, ctx: AnalyzeTypeContext) -> ProperType:
-        args = ctx.type.args
-        type_arg = ctx.api.analyze_type(args[0])
-
-        assert isinstance(ctx.api, TypeAnalyser)
-        assert isinstance(ctx.api.api, SemanticAnalyzer)
+    def find_default_queryset(
+        self, unbound_type: UnboundType, api: TypeAnalyser, sem_api: SemanticAnalyzer
+    ) -> ProperType:
+        args = unbound_type.args
+        type_arg = api.analyze_type(args[0])
 
         if isinstance(type_arg, TypeVarType):
-            func = self._lookup_fully_qualified(ctx.api.api.scope.current_target())
+            func = self._lookup_fully_qualified(sem_api.scope.current_target())
             assert func is not None
             assert func.node is not None
             self.register_for_function_hook(func.node)
-            return get_proper_type(ctx.type)
+            return get_proper_type(unbound_type)
         else:
             if isinstance(type_arg, AnyType):
-                ctx.api.fail("Can't get default query set for Any", ctx.context)
-                return ctx.type
+                api.fail("Can't get default query set for Any", unbound_type)
+                return unbound_type
 
             if isinstance(type_arg, UnionType):
                 concrete = concrete_children.ConcreteChildren(
@@ -174,8 +170,8 @@ class Actions:
                     ],
                     _lookup_fully_qualified=self._lookup_fully_qualified,
                     _django_context=self._django_context,
-                    _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
-                ).querysets(ctx.api.api)
+                    _fail_function=lambda reason: api.fail(reason, unbound_type),
+                ).querysets(sem_api)
                 return get_proper_type(UnionType(tuple(concrete)))
 
             assert isinstance(type_arg, Instance)
@@ -184,8 +180,8 @@ class Actions:
                     children=[],
                     _lookup_fully_qualified=self._lookup_fully_qualified,
                     _django_context=self._django_context,
-                    _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
-                ).make_one_queryset(ctx.api.api, type_arg.type)
+                    _fail_function=lambda reason: api.fail(reason, unbound_type),
+                ).make_one_queryset(sem_api, type_arg.type)
             )
 
     def modify_default_queryset_return_type(

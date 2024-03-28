@@ -9,6 +9,8 @@ from mypy.plugin import (
     DynamicClassDefContext,
     FunctionContext,
 )
+from mypy.semanal import SemanticAnalyzer
+from mypy.typeanal import TypeAnalyser
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.transformers.managers import resolve_manager_method
@@ -55,14 +57,21 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             Known = ExtendedMypyStubs.Annotations
             name = Known(self.fullname)
 
+            assert isinstance(ctx.api, TypeAnalyser)
+            assert isinstance(ctx.api.api, SemanticAnalyzer)
+
             if name is Known.CONCRETE:
-                return self.actions.find_concrete_models(ctx)
+                method = self.actions.find_concrete_models
+
             elif name is Known.CONCRETE_QUERYSET:
-                return self.actions.find_concrete_querysets(ctx)
+                method = self.actions.find_concrete_querysets
+
             elif name is Known.DEFAULT_QUERYSET:
-                return self.actions.find_default_queryset(ctx)
+                method = self.actions.find_default_queryset
             else:
                 assert_never(name)
+
+            return method(unbound_type=ctx.type, api=ctx.api, sem_api=ctx.api.api)
 
     @plugin_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
