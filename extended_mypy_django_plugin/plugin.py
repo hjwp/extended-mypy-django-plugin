@@ -1,7 +1,8 @@
 import enum
 from typing import Generic
 
-from mypy.nodes import FuncDef
+from mypy.checker import TypeChecker
+from mypy.nodes import CallExpr, FuncDef
 from mypy.plugin import (
     AnalyzeTypeContext,
     AttributeContext,
@@ -84,8 +85,15 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             )
 
         def run(self, ctx: FunctionContext) -> MypyType:
+            assert isinstance(ctx.api, TypeChecker)
+            assert isinstance(ctx.context, CallExpr)
+
             return self.actions.modify_default_queryset_return_type(
-                ctx, super_hook=self.super_hook
+                ctx,
+                context=ctx.context,
+                api=ctx.api,
+                super_hook=self.super_hook,
+                desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
             )
 
     @plugin_hook.hook

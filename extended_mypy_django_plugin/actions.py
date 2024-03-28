@@ -21,6 +21,7 @@ from mypy.typeanal import TypeAnalyser
 from mypy.types import (
     AnyType,
     CallableType,
+    FormalArgument,
     Instance,
     ProperType,
     TypeOfAny,
@@ -185,59 +186,89 @@ class Actions:
             )
 
     def modify_default_queryset_return_type(
-        self, ctx: FunctionContext, *, super_hook: Callable[[FunctionContext], MypyType] | None
+        self,
+        ctx: FunctionContext,
+        *,
+        context: CallExpr,
+        api: TypeChecker,
+        super_hook: Callable[[FunctionContext], MypyType] | None,
+        desired_annotation_fullname: str,
     ) -> ProperType:
-        assert isinstance(ctx.api, TypeChecker)
-        assert isinstance(ctx.context, CallExpr)
-        func = ctx.api.lookup_type(ctx.context.callee)
+        if not isinstance(ctx.default_return_type, UnboundType):
+            return get_proper_type(ctx.default_return_type)
+
+        func = api.get_expression_type(context.callee)
         assert isinstance(func, CallableType)
 
-        func_def = ctx.api.expr_checker.analyze_ref_expr(ctx.context.callee)  # type: ignore[arg-type]
-        assert isinstance(func_def, CallableType)
+        if not isinstance(func.ret_type, UnboundType):
+            return get_proper_type(ctx.default_return_type)
 
-        assert isinstance(func.ret_type, UnboundType)
-        type_var = func.ret_type.args[0]
-        assert isinstance(type_var, UnboundType)
-
-        arg_value: MypyType | None = None
-        for arg in func_def.formal_arguments():
-            arg_type = arg.typ
-            if isinstance(arg_type, TypeType):
-                arg_type = arg_type.item
-
-            if isinstance(arg_type, TypeVarType) and arg_type.name == type_var.name:
-                found = func.argument_by_name(arg.name)
-                assert found is not None
-                arg_value = found.typ
-                break
-
-        if arg_value is None:
-            ctx.api.fail("Can't work out what value to bind the return type to", ctx.context)
+        if len(func.ret_type.args) != 1:
+            api.fail("DefaultQuerySet takes only one argument", context)
             return AnyType(TypeOfAny.from_error)
 
-        if isinstance(arg_value, UnionType):
+        as_generic_type = api.named_generic_type(func.ret_type.name, [func.ret_type.args[0]])
+        if as_generic_type.type.fullname != desired_annotation_fullname:
+            return ctx.default_return_type
+
+        found_type: MypyType | None = None
+
+        type_var = func.ret_type.args[0]
+
+        if isinstance(type_var, UnboundType):
+            match: FormalArgument | None = None
+            for arg in func.formal_arguments():
+                arg_name: str | None = None
+                if isinstance(arg.typ, TypeType) and isinstance(arg.typ.item, TypeVarType):
+                    arg_name = arg.typ.item.name
+
+                elif isinstance(arg, TypeVarType):
+                    arg_name = arg.typ.name
+
+                if arg_name and arg_name == type_var.name:
+                    match = arg
+                    break
+
+            if match is not None:
+                for arg_name, arg_type in zip(ctx.callee_arg_names, ctx.arg_types):
+                    if arg_name == match.name:
+                        found_type = arg_type[0]
+
+            if found_type is None:
+                api.fail("Failed to find an argument that matched the type var", context)
+                return AnyType(TypeOfAny.from_error)
+
+            if isinstance(found_type, CallableType):
+                type_var = found_type.ret_type
+            else:
+                type_var = found_type
+
+        if not isinstance(type_var, Instance | UnionType):
+            api.fail("Don't know what to do with what DefaultQuerySet was given", context)
+            return AnyType(TypeOfAny.from_error)
+
+        if isinstance(type_var, UnionType):
+            if not all(isinstance(item, Instance) for item in type_var.items):
+                api.fail("DefaultQuerySet needs to be given Type or an instance of Types", context)
+                return AnyType(TypeOfAny.from_error)
+
             concrete = concrete_children.ConcreteChildren(
                 children=[
-                    item.type.fullname for item in arg_value.items if isinstance(item, Instance)
+                    item.type.fullname for item in type_var.items if isinstance(item, Instance)
                 ],
                 _lookup_fully_qualified=self._lookup_fully_qualified,
                 _django_context=self._django_context,
-                _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
-            ).querysets(ctx.api)
+                _fail_function=lambda reason: api.fail(reason, context),
+            ).querysets(api)
             return get_proper_type(UnionType(tuple(concrete)))
-
-        if isinstance(arg_value, TypeType):
-            arg_value = arg_value.item
-
-        assert isinstance(arg_value, Instance)
 
         return get_proper_type(
             concrete_children.ConcreteChildren(
                 children=[],
                 _lookup_fully_qualified=self._lookup_fully_qualified,
                 _django_context=self._django_context,
-                _fail_function=lambda reason: ctx.api.fail(reason, ctx.context),
-            ).make_one_queryset(ctx.api, arg_value.type)
+                _fail_function=lambda reason: api.fail(reason, context),
+            ).make_one_queryset(api, type_var.type)
         )
 
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
