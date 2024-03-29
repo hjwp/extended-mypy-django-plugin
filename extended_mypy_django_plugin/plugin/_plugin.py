@@ -86,12 +86,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, TypeChecker)
             assert isinstance(ctx.context, CallExpr)
 
-            type_checking = actions.TypeChecking(self.store)
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.modify_default_queryset_return_type(
                 ctx,
                 context=ctx.context,
-                api=ctx.api,
                 super_hook=self.super_hook,
                 desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
             )
@@ -131,5 +130,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return self.super_hook is resolve_manager_method
 
         def run(self, ctx: AttributeContext) -> MypyType:
-            type_checking = actions.TypeChecking(self.store)
+            assert isinstance(ctx.api, TypeChecker)
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
             return type_checking.extended_get_attribute_resolve_manager_method(ctx)

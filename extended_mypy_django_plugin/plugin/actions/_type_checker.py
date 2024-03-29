@@ -32,7 +32,8 @@ from .. import _store
 
 
 class TypeChecking:
-    def __init__(self, store: _store.Store) -> None:
+    def __init__(self, store: _store.Store, *, api: TypeChecker) -> None:
+        self.api = api
         self.store = store
 
     def modify_default_queryset_return_type(
@@ -40,24 +41,23 @@ class TypeChecking:
         ctx: FunctionContext,
         *,
         context: CallExpr,
-        api: TypeChecker,
         super_hook: Callable[[FunctionContext], MypyType] | None,
         desired_annotation_fullname: str,
     ) -> ProperType:
         if not isinstance(ctx.default_return_type, UnboundType):
             return get_proper_type(ctx.default_return_type)
 
-        func = api.get_expression_type(context.callee)
+        func = self.api.get_expression_type(context.callee)
         assert isinstance(func, CallableType)
 
         if not isinstance(func.ret_type, UnboundType):
             return get_proper_type(ctx.default_return_type)
 
         if len(func.ret_type.args) != 1:
-            api.fail("DefaultQuerySet takes only one argument", context)
+            self.api.fail("DefaultQuerySet takes only one argument", context)
             return AnyType(TypeOfAny.from_error)
 
-        as_generic_type = api.named_generic_type(func.ret_type.name, [func.ret_type.args[0]])
+        as_generic_type = self.api.named_generic_type(func.ret_type.name, [func.ret_type.args[0]])
         if as_generic_type.type.fullname != desired_annotation_fullname:
             return ctx.default_return_type
 
@@ -85,7 +85,7 @@ class TypeChecking:
                         found_type = arg_type[0]
 
             if found_type is None:
-                api.fail("Failed to find an argument that matched the type var", context)
+                self.api.fail("Failed to find an argument that matched the type var", context)
                 return AnyType(TypeOfAny.from_error)
 
             if isinstance(found_type, CallableType):
@@ -94,12 +94,14 @@ class TypeChecking:
                 type_var = found_type
 
         if not isinstance(type_var, Instance | UnionType):
-            api.fail("Don't know what to do with what DefaultQuerySet was given", context)
+            self.api.fail("Don't know what to do with what DefaultQuerySet was given", context)
             return AnyType(TypeOfAny.from_error)
 
         if isinstance(type_var, UnionType):
             if not all(isinstance(item, Instance) for item in type_var.items):
-                api.fail("DefaultQuerySet needs to be given Type or an instance of Types", context)
+                self.api.fail(
+                    "DefaultQuerySet needs to be given Type or an instance of Types", context
+                )
                 return AnyType(TypeOfAny.from_error)
 
             concrete = self.store.make_concrete_children(
@@ -108,8 +110,8 @@ class TypeChecking:
                 ],
                 _lookup_fully_qualified=self.store._lookup_fully_qualified,
                 _django_context=self.store._django_context,
-                _fail_function=lambda reason: api.fail(reason, context),
-            ).querysets(api)
+                _fail_function=lambda reason: self.api.fail(reason, context),
+            ).querysets(self.api)
             return get_proper_type(UnionType(tuple(concrete)))
 
         return get_proper_type(
@@ -117,8 +119,8 @@ class TypeChecking:
                 children=[],
                 _lookup_fully_qualified=self.store._lookup_fully_qualified,
                 _django_context=self.store._django_context,
-                _fail_function=lambda reason: api.fail(reason, context),
-            ).make_one_queryset(api, type_var.type)
+                _fail_function=lambda reason: self.api.fail(reason, context),
+            ).make_one_queryset(self.api, type_var.type)
         )
 
     def extended_get_attribute_resolve_manager_method(self, ctx: AttributeContext) -> MypyType:
