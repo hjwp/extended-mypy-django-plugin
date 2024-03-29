@@ -42,7 +42,11 @@ class TypeChecking:
         if not isinstance(ctx.default_return_type, UnboundType):
             return ctx.default_return_type
 
-        func = self.api.get_expression_type(context.callee)
+        if hasattr(self.api, "get_expression_type"):
+            # In later mypy versions
+            func = self.api.get_expression_type(context.callee)
+        else:
+            func = self.api.expr_checker.accept(context.callee)
         assert isinstance(func, CallableType)
 
         if not isinstance(func.ret_type, UnboundType):

@@ -15,10 +15,16 @@ authors = [
 [project.optional-dependencies]
 tests = [
     "pytest==8.1.1",
-    "pytest-mypy-plugins==3.1.1",
 ]
 stubs-latest = [
+    "mypy==1.9.0",
     "django-stubs==4.2.7",
+    "pytest-mypy-plugins==3.1.1",
+]
+stubs-older = [
+    "mypy==1.2.0",
+    "django-stubs==1.16.0",
+    "pytest-mypy-plugins==1.11.1",
 ]
 
 [tool.hatch.version]

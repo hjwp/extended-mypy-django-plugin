@@ -28,7 +28,6 @@ manager.add_local_dep(
     "example",
     version_file=("djangoexample", "version.py"),
     name="djangoexample=={version}",
-    with_tests=True,
 )
 
 if "TOX_PYTHON" in os.environ:
