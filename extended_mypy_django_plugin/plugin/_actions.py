@@ -38,7 +38,7 @@ from mypy_django_plugin.transformers.managers import (
     resolve_manager_method_from_instance,
 )
 
-from . import concrete_children, fullnames, helpers
+from . import _concrete_children, _fullnames, _helpers
 
 
 class Actions:
@@ -77,7 +77,7 @@ class Actions:
                 else:
                     in_metadata[info.fullname] = on_info
 
-    def concrete_for(self, info: TypeInfo) -> concrete_children.ConcreteChildren:
+    def concrete_for(self, info: TypeInfo) -> _concrete_children.ConcreteChildren:
         self.sync_metadata(info)
         metadata = self._metadata[info.fullname]
         if "concrete_children" not in metadata:
@@ -85,7 +85,7 @@ class Actions:
 
         children = metadata["concrete_children"]
         assert isinstance(children, list)
-        return concrete_children.ConcreteChildren(
+        return _concrete_children.ConcreteChildren(
             children=children,
             _lookup_fully_qualified=self._lookup_fully_qualified,
             _django_context=self._django_context,
@@ -106,10 +106,10 @@ class Actions:
         sym = self._lookup_fully_qualified(fullname)
         if sym is not None and isinstance(sym.node, TypeInfo) and len(sym.node.mro) > 2:
             if any(
-                m.fullname == fullnames.MODEL_CLASS_FULLNAME for m in sym.node.mro
-            ) and not helpers.is_abstract_model(sym.node):
+                m.fullname == _fullnames.MODEL_CLASS_FULLNAME for m in sym.node.mro
+            ) and not _helpers.is_abstract_model(sym.node):
                 for typ in sym.node.mro[1:-2]:
-                    if typ.fullname != sym.node.fullname and helpers.is_abstract_model(typ):
+                    if typ.fullname != sym.node.fullname and _helpers.is_abstract_model(typ):
                         self.concrete_for(typ).add_child(sym.node.fullname)
 
         return None
@@ -123,7 +123,7 @@ class Actions:
         if not isinstance(type_arg, Instance):
             return get_proper_type(UnionType(()))
 
-        if helpers.is_annotated_model_fullname(type_arg.type.fullname):
+        if _helpers.is_annotated_model_fullname(type_arg.type.fullname):
             # If it's already a generated class, we want to use the original model as a base
             type_arg = type_arg.type.bases[0]
 
@@ -140,7 +140,7 @@ class Actions:
             return get_proper_type(UnionType(()))
 
         if hasattr(type_arg, "type"):
-            if helpers.is_annotated_model_fullname(type_arg.type.fullname):
+            if _helpers.is_annotated_model_fullname(type_arg.type.fullname):
                 # If it's already a generated class, we want to use the original model as a base
                 type_arg = type_arg.type.bases[0]
 
@@ -165,7 +165,7 @@ class Actions:
                 return unbound_type
 
             if isinstance(type_arg, UnionType):
-                concrete = concrete_children.ConcreteChildren(
+                concrete = _concrete_children.ConcreteChildren(
                     children=[
                         item.type.fullname for item in type_arg.items if isinstance(item, Instance)
                     ],
@@ -177,7 +177,7 @@ class Actions:
 
             assert isinstance(type_arg, Instance)
             return get_proper_type(
-                concrete_children.ConcreteChildren(
+                _concrete_children.ConcreteChildren(
                     children=[],
                     _lookup_fully_qualified=self._lookup_fully_qualified,
                     _django_context=self._django_context,
@@ -252,7 +252,7 @@ class Actions:
                 api.fail("DefaultQuerySet needs to be given Type or an instance of Types", context)
                 return AnyType(TypeOfAny.from_error)
 
-            concrete = concrete_children.ConcreteChildren(
+            concrete = _concrete_children.ConcreteChildren(
                 children=[
                     item.type.fullname for item in type_var.items if isinstance(item, Instance)
                 ],
@@ -263,7 +263,7 @@ class Actions:
             return get_proper_type(UnionType(tuple(concrete)))
 
         return get_proper_type(
-            concrete_children.ConcreteChildren(
+            _concrete_children.ConcreteChildren(
                 children=[],
                 _lookup_fully_qualified=self._lookup_fully_qualified,
                 _django_context=self._django_context,

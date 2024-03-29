@@ -1,5 +1,5 @@
 import enum
-from typing import Generic, cast
+from typing import Generic
 
 from mypy.checker import TypeChecker
 from mypy.nodes import CallExpr, FuncDef
@@ -18,14 +18,14 @@ from mypy_django_plugin import main
 from mypy_django_plugin.transformers.managers import resolve_manager_method
 from typing_extensions import assert_never
 
-from . import actions, plugin_hook
+from . import _actions, _hook
 
 
 class Hook(
-    Generic[plugin_hook.T_Ctx, plugin_hook.T_Ret],
-    plugin_hook.Hook["ExtendedMypyStubs", plugin_hook.T_Ctx, plugin_hook.T_Ret],
+    Generic[_hook.T_Ctx, _hook.T_Ret],
+    _hook.Hook["ExtendedMypyStubs", _hook.T_Ctx, _hook.T_Ret],
 ):
-    actions: actions.Actions
+    actions: _actions.Actions
 
     def extra_init(self) -> None:
         self.actions = self.plugin.actions
@@ -39,13 +39,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super().__init__(options)
-        self.actions = actions.Actions(
+        self.actions = _actions.Actions(
             self.lookup_fully_qualified,
             django_context=self.django_context,
             mypy_version=mypy_version_tuple,
         )
 
-    @plugin_hook.hook
+    @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
         def choose(self) -> bool:
             return any(
@@ -73,7 +73,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             return method(unbound_type=ctx.type, api=ctx.api, sem_api=ctx.api.api)
 
-    @plugin_hook.hook
+    @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
         def choose(self) -> bool:
             sym = self.plugin.lookup_fully_qualified(self.fullname)
@@ -95,7 +95,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
             )
 
-    @plugin_hook.hook
+    @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
         def choose(self) -> bool:
             self.actions.fill_out_concrete_children(self.fullname)
@@ -105,7 +105,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             # Never called
             return None
 
-    @plugin_hook.hook
+    @_hook.hook
     class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):
         def choose(self) -> bool:
             class_name, _, method_name = self.fullname.rpartition(".")
@@ -120,21 +120,10 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, SemanticAnalyzer)
             return self.actions.transform_type_var_classmethod(ctx, api=ctx.api)
 
-    @plugin_hook.hook
+    @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
         def choose(self) -> bool:
             return self.super_hook is resolve_manager_method
 
         def run(self, ctx: AttributeContext) -> MypyType:
             return self.actions.extended_get_attribute_resolve_manager_method(ctx)
-
-
-def plugin(version: str) -> type[ExtendedMypyStubs]:
-    major, minor, _ = version.split(".", 2)
-
-    class Plugin(ExtendedMypyStubs):
-        def __new__(self, options: Options) -> "Plugin":
-            instance = ExtendedMypyStubs(options, mypy_version_tuple=(int(major), int(minor)))
-            return cast(Plugin, instance)
-
-    return Plugin

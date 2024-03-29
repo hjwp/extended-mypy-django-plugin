@@ -10,7 +10,7 @@ from mypy.typeanal import TypeAnalyser
 from mypy.types import AnyType, Instance, ProperType, TypeOfAny
 from mypy_django_plugin.django.context import DjangoContext
 
-from . import fullnames, helpers
+from . import _fullnames, _helpers
 
 
 class FailFunction(Protocol):
@@ -32,7 +32,7 @@ class ConcreteChildren:
         for child in self.children:
             child_sym = self._lookup_fully_qualified(child)
             if child_sym and isinstance(child_sym.node, TypeInfo):
-                if not helpers.is_abstract_model(child_sym.node):
+                if not _helpers.is_abstract_model(child_sym.node):
                     reviewed.append(child_sym.node.fullname)
 
         if reviewed != self.children:
@@ -42,8 +42,8 @@ class ConcreteChildren:
     def get_dynamic_manager(
         self, api: TypeChecker | SemanticAnalyzer, fullname: str, manager: "Manager[Any]"
     ) -> TypeInfo | None:
-        base_manager_fullname = helpers.get_class_fullname(manager.__class__.__bases__[0])
-        base_manager_info = helpers.lookup_fully_qualified_typeinfo(api, base_manager_fullname)
+        base_manager_fullname = _helpers.get_class_fullname(manager.__class__.__bases__[0])
+        base_manager_info = _helpers.lookup_fully_qualified_typeinfo(api, base_manager_fullname)
 
         generated_managers: dict[str, str]
         if base_manager_info is None or "from_queryset_managers" not in base_manager_info.metadata:
@@ -55,7 +55,7 @@ class ConcreteChildren:
         if generated_manager_name is None:
             return None
 
-        return helpers.lookup_fully_qualified_typeinfo(api, generated_manager_name)
+        return _helpers.lookup_fully_qualified_typeinfo(api, generated_manager_name)
 
     def make_one_queryset(
         self, api: SemanticAnalyzer | TypeAnalyser | TypeChecker, info: TypeInfo
@@ -70,7 +70,7 @@ class ConcreteChildren:
         manager_info: TypeInfo | None
 
         if isinstance(manager, Manager):
-            manager_fullname = helpers.get_class_fullname(manager.__class__)
+            manager_fullname = _helpers.get_class_fullname(manager.__class__)
             sem_api: SemanticAnalyzer | TypeChecker
             if isinstance(api, TypeAnalyser):
                 assert isinstance(api.api, SemanticAnalyzer)
@@ -81,7 +81,7 @@ class ConcreteChildren:
             manager_info = self.get_dynamic_manager(sem_api, manager_fullname, manager)
 
         if manager_info is None:
-            found = self._lookup_fully_qualified(fullnames.QUERYSET_CLASS_FULLNAME)
+            found = self._lookup_fully_qualified(_fullnames.QUERYSET_CLASS_FULLNAME)
             assert found is not None
             assert isinstance(found.node, TypeInfo)
 
@@ -104,7 +104,7 @@ class ConcreteChildren:
                     args = (args[0], args[0])
                 return Instance(found.node, args)
 
-        metadata = helpers.get_django_metadata(manager_info)
+        metadata = _helpers.get_django_metadata(manager_info)
         queryset_fullname = metadata["from_queryset_manager"]
         queryset = self._lookup_fully_qualified(queryset_fullname)
         assert queryset is not None
