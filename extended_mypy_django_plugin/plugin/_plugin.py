@@ -57,7 +57,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, TypeAnalyser)
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
-            type_analyzer = actions.TypeAnalyzing(self.store)
+            type_analyzer = actions.TypeAnalyzing(self.store, api=ctx.api, sem_api=ctx.api.api)
 
             if name is Known.CONCRETE:
                 method = type_analyzer.find_concrete_models
@@ -70,7 +70,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             else:
                 assert_never(name)
 
-            return method(unbound_type=ctx.type, api=ctx.api, sem_api=ctx.api.api)
+            return method(unbound_type=ctx.type)
 
     @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
@@ -120,7 +120,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: DynamicClassDefContext) -> None:
             assert isinstance(ctx.api, SemanticAnalyzer)
 
-            sem_analyzing = actions.SemAnalyzing(self.store, ctx.api)
+            sem_analyzing = actions.SemAnalyzing(self.store, api=ctx.api)
             return sem_analyzing.transform_type_var_classmethod(
                 ctx, mypy_version_tuple=self.plugin.mypy_version_tuple
             )
