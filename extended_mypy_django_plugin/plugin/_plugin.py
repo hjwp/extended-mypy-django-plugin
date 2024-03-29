@@ -120,9 +120,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: DynamicClassDefContext) -> None:
             assert isinstance(ctx.api, SemanticAnalyzer)
 
-            sem_analyzing = actions.SemAnalyzing(self.store)
+            sem_analyzing = actions.SemAnalyzing(self.store, ctx.api)
             return sem_analyzing.transform_type_var_classmethod(
-                ctx, api=ctx.api, mypy_version_tuple=self.plugin.mypy_version_tuple
+                ctx, mypy_version_tuple=self.plugin.mypy_version_tuple
             )
 
     @_hook.hook

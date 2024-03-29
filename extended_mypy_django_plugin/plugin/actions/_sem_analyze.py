@@ -20,17 +20,15 @@ from .. import _store
 
 
 class SemAnalyzing:
-    def __init__(self, store: _store.Store) -> None:
+    def __init__(self, store: _store.Store, *, api: SemanticAnalyzer) -> None:
+        self.api = api
         self.store = store
 
     def transform_type_var_classmethod(
-        self,
-        ctx: DynamicClassDefContext,
-        api: SemanticAnalyzer,
-        mypy_version_tuple: tuple[int, int],
+        self, ctx: DynamicClassDefContext, mypy_version_tuple: tuple[int, int]
     ) -> None:
         if not isinstance(ctx.call.args[0], StrExpr):
-            api.fail(
+            self.api.fail(
                 "First argument to Concrete.type_var must be a string of the name of the variable",
                 ctx.call,
             )
@@ -38,42 +36,44 @@ class SemAnalyzing:
 
         name = ctx.call.args[0].value
         if name != ctx.name:
-            api.fail(
+            self.api.fail(
                 f"First argument {name} was not the name of the variable {ctx.name}",
                 ctx.call,
             )
             return
 
-        module = api.modules[api.cur_mod_id]
+        module = self.api.modules[self.api.cur_mod_id]
         if isinstance(module.names.get(name), TypeVarType):
             return
 
         parent: SymbolTableNode | None = None
         try:
-            parent = api.lookup_type_node(ctx.call.args[1])
+            parent = self.api.lookup_type_node(ctx.call.args[1])
         except AssertionError:
             parent = None
 
         if parent is None:
-            api.fail(
+            self.api.fail(
                 "Second argument to Concrete.type_var must be the abstract model class to find concrete instances of",
                 ctx.call,
             )
             return
 
         if not isinstance(parent.node, TypeInfo):
-            api.fail("Second argument to Concrete.type_var was not pointing at a class", ctx.call)
+            self.api.fail(
+                "Second argument to Concrete.type_var was not pointing at a class", ctx.call
+            )
             return
 
-        object_type = api.named_type("builtins.object")
+        object_type = self.api.named_type("builtins.object")
         values: list[MypyType] = []
-        for instance in self.store.concrete_for(parent.node).instances(api):
+        for instance in self.store.concrete_for(parent.node).instances(self.api):
             values.append(instance)
 
         if mypy_version_tuple >= (1, 4):
             type_var_expr = TypeVarExpr(
                 name=name,
-                fullname=f"{api.cur_mod_id}.{name}",
+                fullname=f"{self.api.cur_mod_id}.{name}",
                 values=values,
                 upper_bound=object_type,
                 default=AnyType(TypeOfAny.from_omitted_generics),
@@ -81,7 +81,7 @@ class SemAnalyzing:
         else:
             type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
                 name=name,
-                fullname=f"{api.cur_mod_id}.{name}",
+                fullname=f"{self.api.cur_mod_id}.{name}",
                 values=values,
                 upper_bound=object_type,
             )
