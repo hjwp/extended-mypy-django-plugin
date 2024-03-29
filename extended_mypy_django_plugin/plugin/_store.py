@@ -90,24 +90,23 @@ class Store:
         type_var: Instance | UnionType,
         fail_function: _concrete_children.FailFunction,
     ) -> MypyType:
+        children: list[TypeInfo] = []
         if isinstance(type_var, UnionType):
-            if not all(isinstance(item, Instance) for item in type_var.items):
-                fail_function("DefaultQuerySet needs to be given Type or an instance of Types")
-                return AnyType(TypeOfAny.from_error)
+            for item in type_var.items:
+                if not isinstance(item, Instance):
+                    fail_function("DefaultQuerySet needs to be given Type or an instance of Types")
+                    return AnyType(TypeOfAny.from_error)
+                children.append(item.type)
+        else:
+            children.append(type_var.type)
 
-            concrete = _concrete_children.ConcreteChildren(
-                children=[
-                    item.type.fullname for item in type_var.items if isinstance(item, Instance)
-                ],
+        concrete = tuple(
+            _concrete_children.ConcreteChildren(
+                children=[],
                 _lookup_fully_qualified=self._lookup_fully_qualified,
                 _django_context=self._django_context,
                 _fail_function=fail_function,
-            ).querysets(api)
-            return UnionType(tuple(concrete))
-
-        return _concrete_children.ConcreteChildren(
-            children=[],
-            _lookup_fully_qualified=self._lookup_fully_qualified,
-            _django_context=self._django_context,
-            _fail_function=fail_function,
-        ).make_one_queryset(api, type_var.type)
+            ).make_one_queryset(api, info)
+            for info in children
+        )
+        return UnionType(concrete)
