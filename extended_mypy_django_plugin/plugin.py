@@ -118,7 +118,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return False
 
         def run(self, ctx: DynamicClassDefContext) -> None:
-            return self.actions.transform_type_var_classmethod(ctx)
+            assert isinstance(ctx.api, SemanticAnalyzer)
+            return self.actions.transform_type_var_classmethod(ctx, api=ctx.api)
 
     @plugin_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
