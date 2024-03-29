@@ -5,7 +5,6 @@ from mypy_django_plugin.lib import helpers
 get_django_metadata = helpers.get_django_metadata
 get_class_fullname = helpers.get_class_fullname
 lookup_fully_qualified_typeinfo = helpers.lookup_fully_qualified_typeinfo
-is_annotated_model_fullname = helpers.is_annotated_model_fullname
 
 
 if hasattr(helpers, "is_abstract_model"):

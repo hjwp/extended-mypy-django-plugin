@@ -10,7 +10,11 @@ from mypy.types import (
     get_proper_type,
 )
 
-from .. import _helpers, _store
+from .. import _fullnames, _store
+
+
+def is_annotated_model_fullname(model_cls_fullname: str) -> bool:
+    return model_cls_fullname.startswith(_fullnames.WITH_ANNOTATIONS_FULLNAME + "[")
 
 
 class TypeAnalyzing:
@@ -28,7 +32,7 @@ class TypeAnalyzing:
         if not isinstance(type_arg, Instance):
             return get_proper_type(UnionType(()))
 
-        if _helpers.is_annotated_model_fullname(type_arg.type.fullname):
+        if is_annotated_model_fullname(type_arg.type.fullname):
             # If it's already a generated class, we want to use the original model as a base
             type_arg = type_arg.type.bases[0]
 
@@ -43,7 +47,7 @@ class TypeAnalyzing:
             return get_proper_type(UnionType(()))
 
         if hasattr(type_arg, "type"):
-            if _helpers.is_annotated_model_fullname(type_arg.type.fullname):
+            if is_annotated_model_fullname(type_arg.type.fullname):
                 # If it's already a generated class, we want to use the original model as a base
                 type_arg = type_arg.type.bases[0]
 
