@@ -105,7 +105,7 @@ class App:
 
         if not specified:
             os.chdir(here.parent / "example")
-            run(bin_dir / "mypy", ".")
+            run(bin_dir / "mypy", ".", *args)
 
     @command
     def tests(self, bin_dir: Path, args: list[str]) -> None:
