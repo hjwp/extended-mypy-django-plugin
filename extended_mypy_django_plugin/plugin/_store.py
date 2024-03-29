@@ -1,21 +1,18 @@
 from collections.abc import Callable
-from typing import ClassVar
 
 from mypy.nodes import (
     SymbolNode,
     SymbolTableNode,
     TypeInfo,
 )
+from mypy.types import AnyType, Instance, TypeOfAny, UnionType
+from mypy.types import Type as MypyType
 from mypy_django_plugin.django.context import DjangoContext
 
 from . import _concrete_children, _fullnames, _helpers
 
 
 class Store:
-    make_concrete_children: ClassVar[type[_concrete_children.ConcreteChildren]] = (
-        _concrete_children.ConcreteChildren
-    )
-
     def __init__(
         self,
         lookup_fully_qualified: Callable[[str], SymbolTableNode | None],
@@ -85,3 +82,32 @@ class Store:
                         self.concrete_for(typ).add_child(sym.node.fullname)
 
         return None
+
+    def make_default_querysets(
+        self,
+        *,
+        api: _concrete_children.ApiType,
+        type_var: Instance | UnionType,
+        fail_function: _concrete_children.FailFunction,
+    ) -> MypyType:
+        if isinstance(type_var, UnionType):
+            if not all(isinstance(item, Instance) for item in type_var.items):
+                fail_function("DefaultQuerySet needs to be given Type or an instance of Types")
+                return AnyType(TypeOfAny.from_error)
+
+            concrete = _concrete_children.ConcreteChildren(
+                children=[
+                    item.type.fullname for item in type_var.items if isinstance(item, Instance)
+                ],
+                _lookup_fully_qualified=self._lookup_fully_qualified,
+                _django_context=self._django_context,
+                _fail_function=fail_function,
+            ).querysets(api)
+            return UnionType(tuple(concrete))
+
+        return _concrete_children.ConcreteChildren(
+            children=[],
+            _lookup_fully_qualified=self._lookup_fully_qualified,
+            _django_context=self._django_context,
+            _fail_function=fail_function,
+        ).make_one_queryset(api, type_var.type)

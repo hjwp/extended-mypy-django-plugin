@@ -14,13 +14,11 @@ from mypy.types import (
     CallableType,
     FormalArgument,
     Instance,
-    ProperType,
     TypeOfAny,
     TypeType,
     TypeVarType,
     UnboundType,
     UnionType,
-    get_proper_type,
 )
 from mypy.types import Type as MypyType
 from mypy_django_plugin.transformers.managers import (
@@ -43,15 +41,15 @@ class TypeChecking:
         context: CallExpr,
         super_hook: Callable[[FunctionContext], MypyType] | None,
         desired_annotation_fullname: str,
-    ) -> ProperType:
+    ) -> MypyType:
         if not isinstance(ctx.default_return_type, UnboundType):
-            return get_proper_type(ctx.default_return_type)
+            return ctx.default_return_type
 
         func = self.api.get_expression_type(context.callee)
         assert isinstance(func, CallableType)
 
         if not isinstance(func.ret_type, UnboundType):
-            return get_proper_type(ctx.default_return_type)
+            return ctx.default_return_type
 
         if len(func.ret_type.args) != 1:
             self.api.fail("DefaultQuerySet takes only one argument", context)
@@ -97,30 +95,10 @@ class TypeChecking:
             self.api.fail("Don't know what to do with what DefaultQuerySet was given", context)
             return AnyType(TypeOfAny.from_error)
 
-        if isinstance(type_var, UnionType):
-            if not all(isinstance(item, Instance) for item in type_var.items):
-                self.api.fail(
-                    "DefaultQuerySet needs to be given Type or an instance of Types", context
-                )
-                return AnyType(TypeOfAny.from_error)
-
-            concrete = self.store.make_concrete_children(
-                children=[
-                    item.type.fullname for item in type_var.items if isinstance(item, Instance)
-                ],
-                _lookup_fully_qualified=self.store._lookup_fully_qualified,
-                _django_context=self.store._django_context,
-                _fail_function=lambda reason: self.api.fail(reason, context),
-            ).querysets(self.api)
-            return get_proper_type(UnionType(tuple(concrete)))
-
-        return get_proper_type(
-            self.store.make_concrete_children(
-                children=[],
-                _lookup_fully_qualified=self.store._lookup_fully_qualified,
-                _django_context=self.store._django_context,
-                _fail_function=lambda reason: self.api.fail(reason, context),
-            ).make_one_queryset(self.api, type_var.type)
+        return self.store.make_default_querysets(
+            api=self.api,
+            type_var=type_var,
+            fail_function=lambda reason: self.api.fail(reason, context),
         )
 
     def extended_get_attribute_resolve_manager_method(self, ctx: AttributeContext) -> MypyType:
@@ -156,4 +134,4 @@ class TypeChecking:
             for instance in ctx.type.items
             if isinstance(instance, Instance)
         )
-        return get_proper_type(UnionType(resolved))
+        return UnionType(resolved)

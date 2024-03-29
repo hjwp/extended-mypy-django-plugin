@@ -11,10 +11,13 @@ from mypy.nodes import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import AnyType, Instance, ProperType, TypeOfAny
+from mypy.types import AnyType, Instance, TypeOfAny
+from mypy.types import Type as MypyType
 from mypy_django_plugin.django.context import DjangoContext
 
 from . import _fullnames, _helpers
+
+ApiType = SemanticAnalyzer | TypeAnalyser | TypeChecker
 
 
 class FailFunction(Protocol):
@@ -90,7 +93,7 @@ class ConcreteChildren:
             assert isinstance(found.node, TypeInfo)
 
             if "_default_manager" not in info.names:
-                concrete: ProperType
+                concrete: MypyType
                 try:
                     concrete = api.named_type(info.fullname)
                 except AssertionError:
@@ -116,7 +119,7 @@ class ConcreteChildren:
         assert not queryset.node.is_generic()
         return Instance(queryset.node, [])
 
-    def instances(self, api: TypeChecker | SemanticAnalyzer) -> Sequence[Instance]:
+    def instances(self, api: ApiType) -> Sequence[Instance]:
         concrete: list[Instance] = []
         reviewed: list[str] = []
 
@@ -135,7 +138,7 @@ class ConcreteChildren:
 
         return concrete
 
-    def querysets(self, api: TypeChecker | SemanticAnalyzer) -> Sequence[Instance]:
+    def querysets(self, api: ApiType) -> Sequence[Instance]:
         querysets: list[Instance] = []
         for instance in self.instances(api):
             querysets.append(self.make_one_queryset(api, instance.type))
