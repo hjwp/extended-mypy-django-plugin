@@ -31,8 +31,6 @@ class Store:
         lookup_info: LookupFunction,
     ) -> None:
         self._django_context = django_context
-        self._metadata: dict[str, dict[str, dict[str, object]]] = {}
-
         self._registered_for_function_hook: set[str] = set()
         self._plugin_lookup_info = lookup_info
 
