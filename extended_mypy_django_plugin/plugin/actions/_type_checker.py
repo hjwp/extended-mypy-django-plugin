@@ -1,10 +1,7 @@
 from collections.abc import Callable
 
 from mypy.checker import TypeChecker
-from mypy.nodes import (
-    CallExpr,
-    MemberExpr,
-)
+from mypy.nodes import CallExpr, MemberExpr, TypeInfo
 from mypy.plugin import (
     AttributeContext,
     FunctionContext,
@@ -95,11 +92,16 @@ class TypeChecking:
             self.api.fail("Don't know what to do with what DefaultQuerySet was given", context)
             return AnyType(TypeOfAny.from_error)
 
-        return self.store.make_default_querysets(
-            api=self.api,
-            type_var=type_var,
-            fail_function=lambda reason: self.api.fail(reason, context),
-        )
+        try:
+            querysets = tuple(self.store.realise_querysets(type_var, self.lookup_info))
+        except _store.RestartDmypy:
+            self.api.fail("You probably need to restart dmypy", context)
+            return AnyType(TypeOfAny.from_error)
+        except _store.UnionMustBeOfTypes:
+            self.api.fail("Union must be of instances of models", context)
+            return AnyType(TypeOfAny.from_error)
+        else:
+            return UnionType(querysets)
 
     def extended_get_attribute_resolve_manager_method(self, ctx: AttributeContext) -> MypyType:
         # Copy from original resolve_manager_method
@@ -135,3 +137,6 @@ class TypeChecking:
             if isinstance(instance, Instance)
         )
         return UnionType(resolved)
+
+    def lookup_info(self, fullname: str) -> TypeInfo | None:
+        return self.store._plugin_lookup_info(fullname)

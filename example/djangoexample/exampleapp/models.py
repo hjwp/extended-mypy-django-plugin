@@ -1,8 +1,4 @@
-from typing import TYPE_CHECKING, cast
-
 from django.db import models
-
-from extended_mypy_django_plugin import Concrete
 
 
 class Parent(models.Model):
@@ -10,12 +6,6 @@ class Parent(models.Model):
 
     class Meta:
         abstract = True
-
-
-if TYPE_CHECKING:
-    _Parent_concrete = cast(Concrete[Parent], None)
-    # This next line failing means you need to restart dmypy
-    _Parent_concrete.objects
 
 
 class Child1(Parent):

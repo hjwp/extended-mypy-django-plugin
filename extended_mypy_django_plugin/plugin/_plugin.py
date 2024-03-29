@@ -2,7 +2,7 @@ import enum
 from typing import Generic
 
 from mypy.checker import TypeChecker
-from mypy.nodes import CallExpr, FuncDef
+from mypy.nodes import CallExpr, FuncDef, TypeInfo
 from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
@@ -41,7 +41,16 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super().__init__(options)
         self.mypy_version_tuple = mypy_version_tuple
-        self.store = _store.Store(self.lookup_fully_qualified, django_context=self.django_context)
+        self.store = _store.Store(
+            django_context=self.django_context, lookup_info=self._lookup_info
+        )
+
+    def _lookup_info(self, fullname: str) -> TypeInfo | None:
+        sym = self.lookup_fully_qualified(fullname)
+        if sym and isinstance(sym.node, TypeInfo):
+            return sym.node
+        else:
+            return None
 
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
@@ -101,7 +110,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
         def choose(self) -> bool:
-            self.store.fill_out_concrete_children(self.fullname)
+            self.store.fill_out_concrete_children(self.fullname, self.plugin._lookup_info)
             return False
 
         def run(self, ctx: ClassDefContext) -> None:

@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from mypy.nodes import (
     GDEF,
     StrExpr,
@@ -66,15 +68,15 @@ class SemAnalyzing:
             return
 
         object_type = self.api.named_type("builtins.object")
-        values: list[MypyType] = []
-        for instance in self.store.concrete_for(parent.node).instances(self.api):
-            values.append(instance)
+        values = self._concrete_children_for(parent.node)
+        if not values:
+            self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
 
         if mypy_version_tuple >= (1, 4):
             type_var_expr = TypeVarExpr(
                 name=name,
                 fullname=f"{self.api.cur_mod_id}.{name}",
-                values=values,
+                values=list(values),
                 upper_bound=object_type,
                 default=AnyType(TypeOfAny.from_omitted_generics),
             )
@@ -82,9 +84,27 @@ class SemAnalyzing:
             type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
                 name=name,
                 fullname=f"{self.api.cur_mod_id}.{name}",
-                values=values,
+                values=list(values),
                 upper_bound=object_type,
             )
 
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
+
+    def lookup_info(self, fullname: str) -> TypeInfo | None:
+        instance = self.api.named_type_or_none(fullname)
+        if instance:
+            return instance.type
+
+        return self.store._plugin_lookup_info(fullname)
+
+    def _concrete_children_for(self, parent: TypeInfo) -> Sequence[MypyType]:
+        values: list[MypyType] = []
+        concrete_type_infos = self.store.concrete_children(parent, self.lookup_info)
+
+        for info in concrete_type_infos:
+            instance = self.api.named_type_or_none(info.fullname)
+            if instance:
+                values.append(instance)
+
+        return values
