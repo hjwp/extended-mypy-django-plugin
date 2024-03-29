@@ -73,10 +73,39 @@ class App:
 
     @command
     def types(self, bin_dir: Path, args: list[str]) -> None:
-        if not any(not a.startswith("-") for a in args):
-            args.append(str((here / "..").resolve()))
+        specified: bool = True
+        locations: list[str] = [a for a in args if not a.startswith("-")]
+        args = [a for a in args if a.startswith("-")]
 
-        run(bin_dir / "mypy", *args)
+        if not locations:
+            specified = False
+            locations.append(str((here / "..").resolve()))
+        else:
+            cwd = Path.cwd()
+            paths: list[Path] = []
+            for location in locations:
+                from_current = cwd / location
+                from_root = here.parent / location
+
+                if from_current.exists():
+                    paths.append(from_current)
+                elif from_root.exists():
+                    paths.append(from_root)
+                else:
+                    raise ValueError(f"Couldn't find path for {location}")
+
+            example_root = here.parent / "example"
+            if any(path.is_relative_to(example_root) for path in paths):
+                if not all(path.is_relative_to(example_root) for path in paths):
+                    raise ValueError("If specifying an example path, all paths must be from there")
+                os.chdir(example_root)
+            locations = [str(path) for path in paths]
+
+        run(bin_dir / "mypy", *locations, *args)
+
+        if not specified:
+            os.chdir(here.parent / "example")
+            run(bin_dir / "mypy", ".")
 
     @command
     def tests(self, bin_dir: Path, args: list[str]) -> None:

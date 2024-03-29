@@ -19,7 +19,15 @@ manager.add_local_dep(
     "{here}",
     "..",
     version_file=("extended_mypy_django_plugin", "version.py"),
-    name="extended_mypy_django_plugin=={version}",
+    name="extended_mypy_django_plugin[stubs-latest,tests]=={version}",
+)
+
+manager.add_local_dep(
+    "{here}",
+    "..",
+    "example",
+    version_file=("djangoexample", "version.py"),
+    name="djangoexample=={version}",
     with_tests=True,
 )
 

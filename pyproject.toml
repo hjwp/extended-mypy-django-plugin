@@ -11,16 +11,14 @@ license = { text = "MIT" }
 authors = [
     { name = "Stephen Moore", email = "stephen@delfick.com" },
 ]
-dependencies = [
-    "django==4.2.9",
-    "django-stubs==4.2.7",
-    "psycopg2-binary==2.9.9"
-]
 
 [project.optional-dependencies]
 tests = [
     "pytest==8.1.1",
     "pytest-mypy-plugins==3.1.1",
+]
+stubs-latest = [
+    "django-stubs==4.2.7",
 ]
 
 [tool.hatch.version]

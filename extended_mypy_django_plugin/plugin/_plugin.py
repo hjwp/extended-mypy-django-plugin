@@ -2,7 +2,7 @@ import enum
 from typing import Generic
 
 from mypy.checker import TypeChecker
-from mypy.nodes import CallExpr, FuncDef
+from mypy.nodes import CallExpr, FuncDef, TypeInfo
 from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
