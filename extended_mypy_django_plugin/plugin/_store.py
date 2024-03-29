@@ -154,6 +154,16 @@ class Store:
     ) -> str | None:
         dynamic_manager = self.get_dynamic_manager(model, lookup_info)
         if not dynamic_manager:
+            model_cls = self._django_context.get_model_class_by_fullname(model.fullname)
+            if (
+                model_cls
+                and hasattr(model_cls, "_default_manager")
+                and isinstance(model_cls._default_manager, models.Manager)
+                and hasattr(model_cls._default_manager, "_queryset_class")
+            ):
+                queryset = model_cls._default_manager._queryset_class
+                if isinstance(queryset, type) and issubclass(queryset, models.QuerySet):
+                    return queryset.__module__ + "." + queryset.__qualname__
             return None
 
         name = self.sync_metadata(dynamic_manager)["django"].get("from_queryset_manager")
