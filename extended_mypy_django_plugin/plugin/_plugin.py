@@ -18,17 +18,17 @@ from mypy_django_plugin import main
 from mypy_django_plugin.transformers.managers import resolve_manager_method
 from typing_extensions import assert_never
 
-from . import _actions, _hook
+from . import _hook, _store, actions
 
 
 class Hook(
     Generic[_hook.T_Ctx, _hook.T_Ret],
     _hook.Hook["ExtendedMypyStubs", _hook.T_Ctx, _hook.T_Ret],
 ):
-    actions: _actions.Actions
+    store: _store.Store
 
     def extra_init(self) -> None:
-        self.actions = self.plugin.actions
+        self.store = self.plugin.store
 
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
@@ -39,11 +39,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super().__init__(options)
-        self.actions = _actions.Actions(
-            self.lookup_fully_qualified,
-            django_context=self.django_context,
-            mypy_version=mypy_version_tuple,
-        )
+        self.mypy_version_tuple = mypy_version_tuple
+        self.store = _store.Store(self.lookup_fully_qualified, django_context=self.django_context)
 
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
@@ -60,14 +57,16 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, TypeAnalyser)
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
+            type_analyzer = actions.TypeAnalyzing(self.store)
+
             if name is Known.CONCRETE:
-                method = self.actions.find_concrete_models
+                method = type_analyzer.find_concrete_models
 
             elif name is Known.CONCRETE_QUERYSET:
-                method = self.actions.find_concrete_querysets
+                method = type_analyzer.find_concrete_querysets
 
             elif name is Known.DEFAULT_QUERYSET:
-                method = self.actions.find_default_queryset
+                method = type_analyzer.find_default_queryset
             else:
                 assert_never(name)
 
@@ -80,14 +79,16 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return bool(
                 sym
                 and isinstance(sym.node, FuncDef)
-                and self.actions.registered_for_function_hook(sym.node)
+                and self.store.registered_for_function_hook(sym.node)
             )
 
         def run(self, ctx: FunctionContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
             assert isinstance(ctx.context, CallExpr)
 
-            return self.actions.modify_default_queryset_return_type(
+            type_checking = actions.TypeChecking(self.store)
+
+            return type_checking.modify_default_queryset_return_type(
                 ctx,
                 context=ctx.context,
                 api=ctx.api,
@@ -98,7 +99,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
         def choose(self) -> bool:
-            self.actions.fill_out_concrete_children(self.fullname)
+            self.store.fill_out_concrete_children(self.fullname)
             return False
 
         def run(self, ctx: ClassDefContext) -> None:
@@ -118,7 +119,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
         def run(self, ctx: DynamicClassDefContext) -> None:
             assert isinstance(ctx.api, SemanticAnalyzer)
-            return self.actions.transform_type_var_classmethod(ctx, api=ctx.api)
+
+            sem_analyzing = actions.SemAnalyzing(self.store)
+            return sem_analyzing.transform_type_var_classmethod(
+                ctx, api=ctx.api, mypy_version_tuple=self.plugin.mypy_version_tuple
+            )
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
@@ -126,4 +131,5 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return self.super_hook is resolve_manager_method
 
         def run(self, ctx: AttributeContext) -> MypyType:
-            return self.actions.extended_get_attribute_resolve_manager_method(ctx)
+            type_checking = actions.TypeChecking(self.store)
+            return type_checking.extended_get_attribute_resolve_manager_method(ctx)
