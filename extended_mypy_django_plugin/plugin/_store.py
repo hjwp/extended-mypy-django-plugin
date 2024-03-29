@@ -41,25 +41,13 @@ class Store:
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
 
-        if info.fullname not in self._metadata:
-            self._metadata[info.fullname] = {}
+        if "concrete_children" not in info.metadata["django_extended"]:
+            info.metadata["django_extended"]["concrete_children"] = []
 
-        in_memory = self._metadata[info.fullname]
-        for k, v in info.metadata.items():
-            if k not in in_memory:
-                in_memory[k] = v
-            elif v:
-                in_memory[k] = v
-            elif found := in_memory.get(k):
-                info.metadata[k] = found
-
-        return in_memory
+        return info.metadata
 
     def retrieve_concrete_children_from_metadata(self, parent: TypeInfo) -> list[str]:
         metadata = self.sync_metadata(parent)
-        if "concrete_children" not in metadata["django_extended"]:
-            metadata["django_extended"]["concrete_children"] = []
-
         children = metadata["django_extended"]["concrete_children"]
         assert isinstance(children, list)
         return children
