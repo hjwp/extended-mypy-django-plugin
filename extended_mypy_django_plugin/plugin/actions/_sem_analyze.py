@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from mypy.nodes import (
     GDEF,
     StrExpr,
@@ -16,7 +14,6 @@ from mypy.types import (
     TypeOfAny,
     TypeVarType,
 )
-from mypy.types import Type as MypyType
 
 from .. import _store
 
@@ -68,7 +65,7 @@ class SemAnalyzing:
             return
 
         object_type = self.api.named_type("builtins.object")
-        values = self._concrete_children_for(parent.node)
+        values = self.store.concrete_children_for(self.api, parent.node, self.lookup_info)
         if not values:
             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
 
@@ -97,14 +94,3 @@ class SemAnalyzing:
             return instance.type
 
         return self.store._plugin_lookup_info(fullname)
-
-    def _concrete_children_for(self, parent: TypeInfo) -> Sequence[MypyType]:
-        values: list[MypyType] = []
-        concrete_type_infos = self.store.concrete_children(parent, self.lookup_info)
-
-        for info in concrete_type_infos:
-            instance = self.api.named_type_or_none(info.fullname)
-            if instance:
-                values.append(instance)
-
-        return values

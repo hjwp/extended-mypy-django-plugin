@@ -3,7 +3,9 @@ from typing import Protocol
 
 from django.db import models
 from mypy.nodes import SymbolNode, TypeInfo
+from mypy.semanal import SemanticAnalyzer
 from mypy.types import Instance, UnionType
+from mypy.types import Type as MypyType
 from mypy_django_plugin.django.context import DjangoContext
 
 WITH_ANNOTATIONS_FULLNAME = "django_stubs_ext.WithAnnotations"
@@ -188,3 +190,16 @@ class Store:
                     queryset,
                     [Instance(model, []) for _ in range(len(queryset.type_vars))],
                 )
+
+    def concrete_children_for(
+        self, api: SemanticAnalyzer, parent: TypeInfo, lookup_info: LookupFunction
+    ) -> Sequence[MypyType]:
+        values: list[MypyType] = []
+
+        concrete_type_infos = self.concrete_children(parent, lookup_info)
+        for info in concrete_type_infos:
+            instance = api.named_type_or_none(info.fullname)
+            if instance:
+                values.append(instance)
+
+        return values

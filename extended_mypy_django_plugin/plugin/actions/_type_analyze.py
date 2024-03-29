@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from mypy.nodes import TypeInfo
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
@@ -41,7 +39,9 @@ class TypeAnalyzing:
             # If it's already a generated class, we want to use the original model as a base
             type_arg = type_arg.type.bases[0]
 
-        concrete = tuple(self._concrete_children_for(type_arg.type))
+        concrete = tuple(
+            self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
+        )
         if not concrete:
             self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
             return AnyType(TypeOfAny.from_error)
@@ -60,7 +60,9 @@ class TypeAnalyzing:
                 # If it's already a generated class, we want to use the original model as a base
                 type_arg = type_arg.type.bases[0]
 
-        concrete = tuple(self._concrete_children_for(type_arg.type))
+        concrete = tuple(
+            self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
+        )
         if not concrete:
             self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
             return AnyType(TypeOfAny.from_error)
@@ -112,14 +114,3 @@ class TypeAnalyzing:
             return instance.type
 
         return self.store._plugin_lookup_info(fullname)
-
-    def _concrete_children_for(self, parent: TypeInfo) -> Sequence[MypyType]:
-        values: list[MypyType] = []
-
-        concrete_type_infos = self.store.concrete_children(parent, self.lookup_info)
-        for info in concrete_type_infos:
-            instance = self.sem_api.named_type_or_none(info.fullname)
-            if instance:
-                values.append(instance)
-
-        return values
