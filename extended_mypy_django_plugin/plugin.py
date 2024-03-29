@@ -1,8 +1,9 @@
 import enum
-from typing import Generic
+from typing import Generic, cast
 
 from mypy.checker import TypeChecker
 from mypy.nodes import CallExpr, FuncDef
+from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
     AttributeContext,
@@ -18,8 +19,6 @@ from mypy_django_plugin.transformers.managers import resolve_manager_method
 from typing_extensions import assert_never
 
 from . import actions, plugin_hook
-
-MYPY_VERSION_TUPLE: tuple[int, int]
 
 
 class Hook(
@@ -38,12 +37,12 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
         DEFAULT_QUERYSET = "extended_mypy_django_plugin.annotations.DefaultQuerySet"
 
-    def __init__(self, options: main.Options) -> None:
+    def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super().__init__(options)
         self.actions = actions.Actions(
             self.lookup_fully_qualified,
             django_context=self.django_context,
-            mypy_version=MYPY_VERSION_TUPLE,
+            mypy_version=mypy_version_tuple,
         )
 
     @plugin_hook.hook
@@ -131,7 +130,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
 
 def plugin(version: str) -> type[ExtendedMypyStubs]:
-    global MYPY_VERSION_TUPLE
     major, minor, _ = version.split(".", 2)
-    MYPY_VERSION_TUPLE = (int(major), int(minor))
-    return ExtendedMypyStubs
+
+    class Plugin(ExtendedMypyStubs):
+        def __new__(self, options: Options) -> "Plugin":
+            instance = ExtendedMypyStubs(options, mypy_version_tuple=(int(major), int(minor)))
+            return cast(Plugin, instance)
+
+    return Plugin
