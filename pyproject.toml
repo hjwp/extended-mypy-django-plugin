@@ -50,3 +50,6 @@ select = [
     "RUF",
     "F",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"example/djangoexample/views.py" = ["F821"]

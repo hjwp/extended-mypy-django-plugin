@@ -51,14 +51,14 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
         self.name = name
 
     @overload
-    def __get__(self, instance: None, owner: None) -> hook: ...
+    def __get__(self, instance: None, owner: None) -> hook[T_Plugin, T_Ctx, T_Ret]: ...
 
     @overload
     def __get__(self, instance: T_Plugin, owner: type[T_Plugin]) -> _HookChooser[T_Ctx, T_Ret]: ...
 
     def __get__(
         self, instance: T_Plugin | None, owner: type[T_Plugin] | None = None
-    ) -> hook | _HookChooser[T_Ctx, T_Ret]:
+    ) -> hook[T_Plugin, T_Ctx, T_Ret] | _HookChooser[T_Ctx, T_Ret]:
         if instance is None:
             return self
 
