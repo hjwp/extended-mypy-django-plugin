@@ -62,7 +62,7 @@ class Store:
         ret: list[TypeInfo] = []
         for child in children:
             info = lookup_info(child)
-            if info:
+            if info and not info.metadata.get("django", {}).get("is_abstract_model", False):
                 ret.append(info)
 
         return ret
@@ -74,18 +74,14 @@ class Store:
     def registered_for_function_hook(self, node: SymbolNode) -> bool:
         return node.fullname in self._registered_for_function_hook
 
-    def fill_out_concrete_children(self, fullname: str, lookup_info: LookupFunction) -> None:
+    def associate_model_heirarchy(self, fullname: str, lookup_info: LookupFunction) -> None:
         if not fullname:
             return None
 
         info = lookup_info(fullname)
         if info and len(info.mro) > 2:
-            model = self._django_context.get_model_class_by_fullname(info.fullname)
-            if model and not model._meta.abstract:
-                for typ in info.mro[1:-2]:
-                    parent_model = self._django_context.get_model_class_by_fullname(typ.fullname)
-                    if parent_model and parent_model is not model and parent_model._meta.abstract:
-                        self.add_child(typ, info.fullname)
+            for typ in info.mro[1:-2]:
+                self.add_child(typ, info.fullname)
 
         return None
 

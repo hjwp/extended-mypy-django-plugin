@@ -110,12 +110,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
         def choose(self) -> bool:
-            self.store.fill_out_concrete_children(self.fullname, self.plugin._lookup_info)
-            return False
+            sym = self.plugin._lookup_info(self.fullname)
+            return self.fullname != _store.MODEL_CLASS_FULLNAME and bool(
+                sym and _store.MODEL_CLASS_FULLNAME in [m.fullname for m in sym.mro]
+            )
 
         def run(self, ctx: ClassDefContext) -> None:
-            # Never called
-            return None
+            return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
 
     @_hook.hook
     class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):
