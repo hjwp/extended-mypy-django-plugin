@@ -16,10 +16,6 @@ from mypy.types import (
 from .. import _store
 
 
-def is_annotated_model_fullname(model_cls_fullname: str) -> bool:
-    return model_cls_fullname.startswith(_store.WITH_ANNOTATIONS_FULLNAME + "[")
-
-
 class TypeAnalyzing:
     def __init__(
         self, store: _store.Store, *, api: TypeAnalyser, sem_api: SemanticAnalyzer
@@ -35,10 +31,6 @@ class TypeAnalyzing:
         if not isinstance(type_arg, Instance):
             return UnionType(())
 
-        if is_annotated_model_fullname(type_arg.type.fullname):
-            # If it's already a generated class, we want to use the original model as a base
-            type_arg = type_arg.type.bases[0]
-
         concrete = tuple(
             self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
         )
@@ -52,13 +44,8 @@ class TypeAnalyzing:
         args = unbound_type.args
         type_arg = self.api.analyze_type(args[0])
 
-        if not isinstance(type_arg, Instance | TypeVarType):
+        if not isinstance(type_arg, Instance):
             return UnionType(())
-
-        if hasattr(type_arg, "type"):
-            if is_annotated_model_fullname(type_arg.type.fullname):
-                # If it's already a generated class, we want to use the original model as a base
-                type_arg = type_arg.type.bases[0]
 
         concrete = tuple(
             self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
