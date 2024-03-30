@@ -32,7 +32,7 @@ class TypeAnalyzing:
             return UnionType(())
 
         concrete = tuple(
-            self.store.concrete_children_for(
+            self.store.retrieve_concrete_children_types(
                 type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
             )
         )
@@ -50,7 +50,7 @@ class TypeAnalyzing:
             return UnionType(())
 
         concrete = tuple(
-            self.store.concrete_children_for(
+            self.store.retrieve_concrete_children_types(
                 type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
             )
         )

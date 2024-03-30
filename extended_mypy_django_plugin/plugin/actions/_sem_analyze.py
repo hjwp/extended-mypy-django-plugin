@@ -65,7 +65,7 @@ class SemAnalyzing:
             return
 
         object_type = self.api.named_type("builtins.object")
-        values = self.store.concrete_children_for(
+        values = self.store.retrieve_concrete_children_types(
             parent.node, self.lookup_info, self.api.named_type_or_none
         )
         if not values:

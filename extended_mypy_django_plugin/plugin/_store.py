@@ -44,26 +44,21 @@ class Store:
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
 
-        if "concrete_children" not in info.metadata["django_extended"]:
-            info.metadata["django_extended"]["concrete_children"] = []
+        if "all_children" not in info.metadata["django_extended"]:
+            info.metadata["django_extended"]["all_children"] = []
 
         return info.metadata
 
-    def retrieve_concrete_children_from_metadata(self, parent: TypeInfo) -> list[str]:
+    def retrieve_all_children_from_metadata(self, parent: TypeInfo) -> list[str]:
         metadata = self.sync_metadata(parent)
-        children = metadata["django_extended"]["concrete_children"]
+        children = metadata["django_extended"]["all_children"]
         assert isinstance(children, list)
         return children
 
-    def add_child(self, parent: TypeInfo, child: str) -> None:
-        children = self.retrieve_concrete_children_from_metadata(parent)
-        if child not in children:
-            children.append(child)
-
-    def concrete_children(
+    def retrieve_concrete_children_info_from_metadata(
         self, parent: TypeInfo, lookup_info: LookupFunction
     ) -> Sequence[TypeInfo]:
-        children = self.retrieve_concrete_children_from_metadata(parent)
+        children = self.retrieve_all_children_from_metadata(parent)
 
         ret: list[TypeInfo] = []
         for child in children:
@@ -84,6 +79,29 @@ class Store:
 
         return ret
 
+    def retrieve_concrete_children_types(
+        self,
+        parent: TypeInfo,
+        lookup_info: LookupFunction,
+        lookup_instance: LookupInstanceFunction,
+    ) -> Sequence[MypyType]:
+        values: list[MypyType] = []
+
+        concrete_type_infos = self.retrieve_concrete_children_info_from_metadata(
+            parent, lookup_info
+        )
+        for info in concrete_type_infos:
+            instance = lookup_instance(info.fullname)
+            if instance:
+                values.append(instance)
+
+        return values
+
+    def add_child_to_metadata(self, parent: TypeInfo, child: str) -> None:
+        children = self.retrieve_all_children_from_metadata(parent)
+        if child not in children:
+            children.append(child)
+
     def register_for_function_hook(self, node: SymbolNode) -> None:
         assert node.fullname is not None
         self._registered_for_function_hook.add(node.fullname)
@@ -98,7 +116,7 @@ class Store:
         info = lookup_info(fullname)
         if info and len(info.mro) > 2:
             for typ in info.mro[1:-2]:
-                self.add_child(typ, info.fullname)
+                self.add_child_to_metadata(typ, info.fullname)
 
         return None
 
@@ -198,19 +216,3 @@ class Store:
                     queryset,
                     [Instance(model, []) for _ in range(len(queryset.type_vars))],
                 )
-
-    def concrete_children_for(
-        self,
-        parent: TypeInfo,
-        lookup_info: LookupFunction,
-        lookup_instance: LookupInstanceFunction,
-    ) -> Sequence[MypyType]:
-        values: list[MypyType] = []
-
-        concrete_type_infos = self.concrete_children(parent, lookup_info)
-        for info in concrete_type_infos:
-            instance = lookup_instance(info.fullname)
-            if instance:
-                values.append(instance)
-
-        return values
