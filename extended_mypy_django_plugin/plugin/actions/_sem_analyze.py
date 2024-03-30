@@ -65,7 +65,9 @@ class SemAnalyzing:
             return
 
         object_type = self.api.named_type("builtins.object")
-        values = self.store.concrete_children_for(self.api, parent.node, self.lookup_info)
+        values = self.store.concrete_children_for(
+            parent.node, self.lookup_info, self.api.named_type_or_none
+        )
         if not values:
             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
 

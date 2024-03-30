@@ -3,7 +3,6 @@ from typing import Protocol
 
 from django.db import models
 from mypy.nodes import SymbolNode, TypeInfo
-from mypy.semanal import SemanticAnalyzer
 from mypy.types import Instance, UnionType
 from mypy.types import Type as MypyType
 
@@ -21,6 +20,10 @@ class RestartDmypy(Exception):
 
 class LookupFunction(Protocol):
     def __call__(self, fullname: str) -> TypeInfo | None: ...
+
+
+class LookupInstanceFunction(Protocol):
+    def __call__(self, fullname: str) -> Instance | None: ...
 
 
 class GetModelClassByFullname(Protocol):
@@ -197,13 +200,16 @@ class Store:
                 )
 
     def concrete_children_for(
-        self, api: SemanticAnalyzer, parent: TypeInfo, lookup_info: LookupFunction
+        self,
+        parent: TypeInfo,
+        lookup_info: LookupFunction,
+        lookup_instance: LookupInstanceFunction,
     ) -> Sequence[MypyType]:
         values: list[MypyType] = []
 
         concrete_type_infos = self.concrete_children(parent, lookup_info)
         for info in concrete_type_infos:
-            instance = api.named_type_or_none(info.fullname)
+            instance = lookup_instance(info.fullname)
             if instance:
                 values.append(instance)
 

@@ -32,7 +32,9 @@ class TypeAnalyzing:
             return UnionType(())
 
         concrete = tuple(
-            self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
+            self.store.concrete_children_for(
+                type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
+            )
         )
         if not concrete:
             self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
@@ -48,7 +50,9 @@ class TypeAnalyzing:
             return UnionType(())
 
         concrete = tuple(
-            self.store.concrete_children_for(self.sem_api, type_arg.type, self.lookup_info)
+            self.store.concrete_children_for(
+                type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
+            )
         )
         if not concrete:
             self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
