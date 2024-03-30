@@ -24,7 +24,7 @@ class SemAnalyzing:
         self.store = store
 
     def transform_type_var_classmethod(
-        self, ctx: DynamicClassDefContext, mypy_version_tuple: tuple[int, int]
+        self, ctx: DynamicClassDefContext, *, mypy_version_tuple: tuple[int, int]
     ) -> None:
         if not isinstance(ctx.call.args[0], StrExpr):
             self.api.fail(
