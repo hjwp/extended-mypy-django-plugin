@@ -6,7 +6,6 @@ from mypy.nodes import SymbolNode, TypeInfo
 from mypy.semanal import SemanticAnalyzer
 from mypy.types import Instance, UnionType
 from mypy.types import Type as MypyType
-from mypy_django_plugin.django.context import DjangoContext
 
 QUERYSET_CLASS_FULLNAME = "django.db.models.query._QuerySet"
 MODEL_CLASS_FULLNAME = "django.db.models.base.Model"
@@ -24,13 +23,17 @@ class LookupFunction(Protocol):
     def __call__(self, fullname: str) -> TypeInfo | None: ...
 
 
+class GetModelClassByFullname(Protocol):
+    def __call__(self, fullname: str) -> type[models.Model] | None: ...
+
+
 class Store:
     def __init__(
         self,
-        django_context: DjangoContext,
+        get_model_class_by_fullname: GetModelClassByFullname,
         lookup_info: LookupFunction,
     ) -> None:
-        self._django_context = django_context
+        self._get_model_class_by_fullname = get_model_class_by_fullname
         self._registered_for_function_hook: set[str] = set()
         self._plugin_lookup_info = lookup_info
 
@@ -68,7 +71,7 @@ class Store:
             abstract: bool = False
             if "django" not in info.metadata:
                 # Old versions of mypy/django-stubs don't have metadata at this point
-                model_cls = self._django_context.get_model_class_by_fullname(info.fullname)
+                model_cls = self._get_model_class_by_fullname(info.fullname)
                 abstract = bool(model_cls and model_cls._meta.abstract)
             else:
                 abstract = info.metadata.get("django", {}).get("is_abstract_model", False)
@@ -115,7 +118,7 @@ class Store:
             )
 
     def get_dynamic_manager(self, model: TypeInfo, lookup_info: LookupFunction) -> TypeInfo | None:
-        model_cls = self._django_context.get_model_class_by_fullname(model.fullname)
+        model_cls = self._get_model_class_by_fullname(model.fullname)
         assert model_cls is not None
         manager = model_cls._default_manager
         if manager is None:
@@ -158,7 +161,7 @@ class Store:
     ) -> str | None:
         dynamic_manager = self.get_dynamic_manager(model, lookup_info)
         if not dynamic_manager:
-            model_cls = self._django_context.get_model_class_by_fullname(model.fullname)
+            model_cls = self._get_model_class_by_fullname(model.fullname)
             if (
                 model_cls
                 and hasattr(model_cls, "_default_manager")

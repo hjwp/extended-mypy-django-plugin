@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Protocol
 
 from mypy.checker import TypeChecker
 from mypy.nodes import CallExpr, MemberExpr, TypeInfo
@@ -18,9 +19,14 @@ from mypy.types import (
     UnionType,
 )
 from mypy.types import Type as MypyType
-from mypy_django_plugin.transformers.managers import resolve_manager_method_from_instance
 
 from .. import _store
+
+
+class ResolveManagerMethodFromInstance(Protocol):
+    def __call__(
+        self, instance: Instance, method_name: str, ctx: AttributeContext
+    ) -> MypyType: ...
 
 
 class TypeChecking:
@@ -104,7 +110,12 @@ class TypeChecking:
         else:
             return UnionType(querysets)
 
-    def extended_get_attribute_resolve_manager_method(self, ctx: AttributeContext) -> MypyType:
+    def extended_get_attribute_resolve_manager_method(
+        self,
+        ctx: AttributeContext,
+        *,
+        resolve_manager_method_from_instance: ResolveManagerMethodFromInstance,
+    ) -> MypyType:
         """
         Copied from django-stubs after https://github.com/typeddjango/django-stubs/pull/2027
 

@@ -16,7 +16,10 @@ from mypy.typeanal import TypeAnalyser
 from mypy.types import Type as MypyType
 from mypy.types import get_proper_type
 from mypy_django_plugin import main
-from mypy_django_plugin.transformers.managers import resolve_manager_method
+from mypy_django_plugin.transformers.managers import (
+    resolve_manager_method,
+    resolve_manager_method_from_instance,
+)
 from typing_extensions import assert_never
 
 from . import _hook, _store, actions
@@ -42,7 +45,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         super().__init__(options)
         self.mypy_version_tuple = mypy_version_tuple
         self.store = _store.Store(
-            django_context=self.django_context, lookup_info=self._lookup_info
+            get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
+            lookup_info=self._lookup_info,
         )
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
@@ -146,5 +150,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, TypeChecker)
             type_checking = actions.TypeChecking(self.store, api=ctx.api)
             return get_proper_type(
-                type_checking.extended_get_attribute_resolve_manager_method(ctx)
+                type_checking.extended_get_attribute_resolve_manager_method(
+                    ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
+                )
             )
