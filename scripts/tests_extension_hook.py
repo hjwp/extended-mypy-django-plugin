@@ -9,7 +9,7 @@ here = pathlib.Path(__file__).parent
 
 def django_plugin_hook(test_item: YamlTestItem) -> None:
     custom_settings = test_item.parsed_test_data.get("custom_settings", "")
-    installed_apps = test_item.parsed_test_data.get("installed_apps", ["myapp"])
+    installed_apps = test_item.parsed_test_data.get("installed_apps", ["myapp", "myapp2"])
     monkeypatch = test_item.parsed_test_data.get("monkeypatch", False)
 
     if installed_apps and custom_settings:
@@ -47,6 +47,13 @@ def django_plugin_hook(test_item: YamlTestItem) -> None:
 
     if "myapp" in installed_apps:
         for root, _, files in os.walk(here / "myapp"):
+            for name in files:
+                location = pathlib.Path(root, name)
+                test_item.files.append(
+                    File(path=str(location.relative_to(here)), content=location.read_text())
+                )
+    if "myapp2" in installed_apps:
+        for root, _, files in os.walk(here / "myapp2"):
             for name in files:
                 location = pathlib.Path(root, name)
                 test_item.files.append(

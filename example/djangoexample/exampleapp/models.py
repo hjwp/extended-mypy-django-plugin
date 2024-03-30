@@ -39,3 +39,18 @@ class Child3(Parent2):
     two = models.CharField(max_length=60)
 
     three = models.CharField(max_length=70)
+
+
+class Child4QuerySet(models.QuerySet["Child2"]):
+    pass
+
+
+Child4Manager = models.Manager.from_queryset(Child4QuerySet)
+
+
+class Child4(Parent2):
+    two = models.CharField(max_length=60)
+
+    three = models.CharField(max_length=70)
+
+    objects = Child4Manager()
