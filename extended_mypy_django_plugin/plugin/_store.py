@@ -62,7 +62,18 @@ class Store:
         ret: list[TypeInfo] = []
         for child in children:
             info = lookup_info(child)
-            if info and not info.metadata.get("django", {}).get("is_abstract_model", False):
+            if not info:
+                continue
+
+            abstract: bool = False
+            if "django" not in info.metadata:
+                # Old versions of mypy/django-stubs don't have metadata at this point
+                model_cls = self._django_context.get_model_class_by_fullname(info.fullname)
+                abstract = bool(model_cls and model_cls._meta.abstract)
+            else:
+                abstract = info.metadata.get("django", {}).get("is_abstract_model", False)
+
+            if not abstract:
                 ret.append(info)
 
         return ret
