@@ -1,6 +1,5 @@
 import inspect
 import os
-import platform
 import shlex
 import sys
 import typing as tp
@@ -8,11 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 here = Path(__file__).parent
-
-if platform.system() == "Windows":
-    import mslex  # type:ignore[import-not-found]
-
-    shlex = mslex
 
 
 class Command:

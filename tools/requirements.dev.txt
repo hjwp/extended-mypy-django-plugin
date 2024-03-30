@@ -1,6 +1,5 @@
 hatch==1.7.0
 neovim==0.3.1
-mslex==1.1.0; sys.platform == 'win32'
 
 ruff==0.3.3
 rpdb
