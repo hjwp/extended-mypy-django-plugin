@@ -44,15 +44,16 @@ class Store:
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
 
-        if "all_children" not in info.metadata["django_extended"]:
+        if not isinstance(info.metadata["django_extended"].get("all_children"), list):
             info.metadata["django_extended"]["all_children"] = []
 
         return info.metadata
 
     def retrieve_all_children_from_metadata(self, parent: TypeInfo) -> list[str]:
         metadata = self.sync_metadata(parent)
-        children = metadata["django_extended"]["all_children"]
-        assert isinstance(children, list)
+        if not isinstance(children := metadata["django_extended"].get("all_children"), list):
+            children = metadata["django_extended"]["all_children"] = []
+
         return children
 
     def retrieve_concrete_children_info_from_metadata(
@@ -103,8 +104,8 @@ class Store:
             children.append(child)
 
     def register_for_function_hook(self, node: SymbolNode) -> None:
-        assert node.fullname is not None
-        self._registered_for_function_hook.add(node.fullname)
+        if node.fullname:
+            self._registered_for_function_hook.add(node.fullname)
 
     def registered_for_function_hook(self, node: SymbolNode) -> bool:
         return node.fullname in self._registered_for_function_hook
@@ -140,7 +141,9 @@ class Store:
 
     def get_dynamic_manager(self, model: TypeInfo, lookup_info: LookupFunction) -> TypeInfo | None:
         model_cls = self._get_model_class_by_fullname(model.fullname)
-        assert model_cls is not None
+        if model_cls is None:
+            raise RestartDmypy()
+
         manager = model_cls._default_manager
         if manager is None:
             return None

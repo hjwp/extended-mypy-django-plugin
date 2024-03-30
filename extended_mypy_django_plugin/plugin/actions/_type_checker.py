@@ -50,7 +50,10 @@ class TypeChecking:
             func = self.api.get_expression_type(context.callee)
         else:
             func = self.api.expr_checker.accept(context.callee)
-        assert isinstance(func, CallableType)
+
+        if not isinstance(func, CallableType):
+            self.api.fail("Expected to be operating on a callable", context)
+            return AnyType(TypeOfAny.from_error)
 
         if not isinstance(func.ret_type, UnboundType):
             return ctx.default_return_type
