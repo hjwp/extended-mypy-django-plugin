@@ -2,7 +2,7 @@ from collections.abc import Iterator, Sequence
 from typing import Protocol
 
 from django.db import models
-from mypy.nodes import SymbolNode, TypeInfo
+from mypy.nodes import TypeInfo
 from mypy.types import Instance, UnionType
 from mypy.types import Type as MypyType
 
@@ -37,7 +37,6 @@ class Store:
         lookup_info: LookupFunction,
     ) -> None:
         self._get_model_class_by_fullname = get_model_class_by_fullname
-        self._registered_for_function_hook: set[str] = set()
         self._plugin_lookup_info = lookup_info
 
     def sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
@@ -102,13 +101,6 @@ class Store:
         children = self.retrieve_all_children_from_metadata(parent)
         if child not in children:
             children.append(child)
-
-    def register_for_function_hook(self, node: SymbolNode) -> None:
-        if node.fullname:
-            self._registered_for_function_hook.add(node.fullname)
-
-    def registered_for_function_hook(self, node: SymbolNode) -> bool:
-        return node.fullname in self._registered_for_function_hook
 
     def associate_model_heirarchy(self, fullname: str, lookup_info: LookupFunction) -> None:
         if not fullname:

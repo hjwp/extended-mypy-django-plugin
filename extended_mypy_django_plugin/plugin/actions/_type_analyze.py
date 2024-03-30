@@ -78,12 +78,6 @@ class TypeAnalyzing:
             return unbound_type
 
         if isinstance(type_arg, TypeVarType):
-            func = self.api.lookup_fully_qualified(self.sem_api.scope.current_target())
-            if func is None or func.node is None:
-                self.api.fail("Can't figure out what we're looking at", unbound_type)
-                return unbound_type
-
-            self.store.register_for_function_hook(func.node)
             return unbound_type
 
         if not isinstance(type_arg, Instance | UnionType):

@@ -38,11 +38,14 @@ class TypeChecking:
         self,
         ctx: FunctionContext,
         *,
-        context: CallExpr,
         super_hook: Callable[[FunctionContext], MypyType] | None,
         desired_annotation_fullname: str,
     ) -> MypyType:
         if not isinstance(ctx.default_return_type, UnboundType):
+            return ctx.default_return_type
+
+        context = ctx.context
+        if not isinstance(context, CallExpr):
             return ctx.default_return_type
 
         if hasattr(self.api, "get_expression_type"):
@@ -58,13 +61,13 @@ class TypeChecking:
         if not isinstance(func.ret_type, UnboundType):
             return ctx.default_return_type
 
-        if len(func.ret_type.args) != 1:
-            self.api.fail("DefaultQuerySet takes only one argument", context)
-            return AnyType(TypeOfAny.from_error)
-
         as_generic_type = self.api.named_generic_type(func.ret_type.name, [func.ret_type.args[0]])
         if as_generic_type.type.fullname != desired_annotation_fullname:
             return ctx.default_return_type
+
+        if len(func.ret_type.args) != 1:
+            self.api.fail("DefaultQuerySet takes only one argument", context)
+            return AnyType(TypeOfAny.from_error)
 
         found_type: MypyType | None = None
 

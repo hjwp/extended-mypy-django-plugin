@@ -2,7 +2,7 @@ import enum
 from typing import Generic
 
 from mypy.checker import TypeChecker
-from mypy.nodes import CallExpr, FuncDef, TypeInfo
+from mypy.nodes import TypeInfo
 from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
@@ -13,8 +13,8 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
+from mypy.types import CallableType, get_proper_type
 from mypy.types import Type as MypyType
-from mypy.types import get_proper_type
 from mypy_django_plugin import main
 from mypy_django_plugin.transformers.managers import (
     resolve_manager_method,
@@ -65,12 +65,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             )
 
         def run(self, ctx: AnalyzeTypeContext) -> MypyType:
-            Known = ExtendedMypyStubs.Annotations
-            name = Known(self.fullname)
-
             assert isinstance(ctx.api, TypeAnalyser)
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
+            Known = ExtendedMypyStubs.Annotations
+            name = Known(self.fullname)
             type_analyzer = actions.TypeAnalyzing(self.store, api=ctx.api, sem_api=ctx.api.api)
 
             if name is Known.CONCRETE:
@@ -90,22 +89,23 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     class get_function_hook(Hook[FunctionContext, MypyType]):
         def choose(self) -> bool:
             sym = self.plugin.lookup_fully_qualified(self.fullname)
-            return bool(
-                sym
-                and isinstance(sym.node, FuncDef)
-                and self.store.registered_for_function_hook(sym.node)
-            )
+            if not sym or not sym.node:
+                return False
+
+            call = getattr(sym.node, "type", None)
+            if not isinstance(call, CallableType):
+                return False
+
+            return call.is_generic()
 
         def run(self, ctx: FunctionContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
-            assert isinstance(ctx.context, CallExpr)
 
             type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return get_proper_type(
                 type_checking.modify_default_queryset_return_type(
                     ctx,
-                    context=ctx.context,
                     super_hook=self.super_hook,
                     desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
                 )
@@ -148,6 +148,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
         def run(self, ctx: AttributeContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
+
             type_checking = actions.TypeChecking(self.store, api=ctx.api)
             return get_proper_type(
                 type_checking.extended_get_attribute_resolve_manager_method(
