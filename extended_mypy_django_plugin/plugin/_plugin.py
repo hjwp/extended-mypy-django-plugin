@@ -2,7 +2,7 @@ import enum
 from typing import Generic
 
 from mypy.checker import TypeChecker
-from mypy.nodes import TypeInfo
+from mypy.nodes import MypyFile, TypeInfo
 from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
@@ -55,6 +55,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return sym.node
         else:
             return None
+
+    def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
+        model_modules = self.django_context.model_modules
+        if file.fullname in model_modules:
+            return [(1, mod, -1) for mod in model_modules if mod != file.fullname]
+        else:
+            return []
 
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
