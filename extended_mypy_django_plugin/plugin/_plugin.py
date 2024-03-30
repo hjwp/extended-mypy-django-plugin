@@ -57,6 +57,36 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return None
 
     @_hook.hook
+    class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
+        def choose(self) -> bool:
+            sym = self.plugin._lookup_info(self.fullname)
+            return self.fullname != _store.MODEL_CLASS_FULLNAME and bool(
+                sym and _store.MODEL_CLASS_FULLNAME in [m.fullname for m in sym.mro]
+            )
+
+        def run(self, ctx: ClassDefContext) -> None:
+            return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
+
+    @_hook.hook
+    class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):
+        def choose(self) -> bool:
+            class_name, _, method_name = self.fullname.rpartition(".")
+            if method_name == "type_var":
+                info = self.plugin._get_typeinfo_or_none(class_name)
+                if info and info.has_base(ExtendedMypyStubs.Annotations.CONCRETE.value):
+                    return True
+
+            return False
+
+        def run(self, ctx: DynamicClassDefContext) -> None:
+            assert isinstance(ctx.api, SemanticAnalyzer)
+
+            sem_analyzing = actions.SemAnalyzing(self.store, api=ctx.api)
+            return sem_analyzing.transform_type_var_classmethod(
+                ctx, mypy_version_tuple=self.plugin.mypy_version_tuple
+            )
+
+    @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
         def choose(self) -> bool:
             return any(
@@ -109,36 +139,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                     super_hook=self.super_hook,
                     desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
                 )
-            )
-
-    @_hook.hook
-    class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
-        def choose(self) -> bool:
-            sym = self.plugin._lookup_info(self.fullname)
-            return self.fullname != _store.MODEL_CLASS_FULLNAME and bool(
-                sym and _store.MODEL_CLASS_FULLNAME in [m.fullname for m in sym.mro]
-            )
-
-        def run(self, ctx: ClassDefContext) -> None:
-            return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
-
-    @_hook.hook
-    class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):
-        def choose(self) -> bool:
-            class_name, _, method_name = self.fullname.rpartition(".")
-            if method_name == "type_var":
-                info = self.plugin._get_typeinfo_or_none(class_name)
-                if info and info.has_base(ExtendedMypyStubs.Annotations.CONCRETE.value):
-                    return True
-
-            return False
-
-        def run(self, ctx: DynamicClassDefContext) -> None:
-            assert isinstance(ctx.api, SemanticAnalyzer)
-
-            sem_analyzing = actions.SemAnalyzing(self.store, api=ctx.api)
-            return sem_analyzing.transform_type_var_classmethod(
-                ctx, mypy_version_tuple=self.plugin.mypy_version_tuple
             )
 
     @_hook.hook
