@@ -1,0 +1,71 @@
+From 80485fe1ce2dad2836544fc43b75ce3a7fc4927f Mon Sep 17 00:00:00 2001
+From: Stephen Moore <stephen@delfick.com>
+Date: Sat, 30 Mar 2024 11:11:24 +1100
+Subject: [PATCH] fixup: Make mypy pass on older django-stubs/mypy
+
+---
+ extended_mypy_django_plugin/plugin/_hook.py                | 4 ++--
+ extended_mypy_django_plugin/plugin/actions/_sem_analyze.py | 4 ++--
+ tools/venv                                                 | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/extended_mypy_django_plugin/plugin/_hook.py b/extended_mypy_django_plugin/plugin/_hook.py
+index 5a0916d..c12f4c6 100644
+--- a/extended_mypy_django_plugin/plugin/_hook.py
++++ b/extended_mypy_django_plugin/plugin/_hook.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ import abc
+ from collections.abc import Callable
+-from typing import Generic, TypeAlias, TypeVar, overload
++from typing import Generic, TypeAlias, TypeVar, cast, overload
+ 
+ from mypy.plugin import Plugin
+ 
+@@ -66,7 +66,7 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
+ 
+         def hook(fullname: str) -> Callable[[T_Ctx], T_Ret] | None:
+             return self.hook(
+-                plugin=instance,
++                plugin=cast(T_Plugin, instance),
+                 fullname=fullname,
+                 super_hook=super_hook(fullname),
+             ).hook()
+diff --git a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
+index cfb67a9..ec4f338 100644
+--- a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
++++ b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
+@@ -70,7 +70,7 @@ class SemAnalyzing:
+             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
+ 
+         if mypy_version_tuple >= (1, 4):
+-            type_var_expr = TypeVarExpr(
++            type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
+                 name=name,
+                 fullname=f"{self.api.cur_mod_id}.{name}",
+                 values=list(values),
+@@ -78,7 +78,7 @@ class SemAnalyzing:
+                 default=AnyType(TypeOfAny.from_omitted_generics),
+             )
+         else:
+-            type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
++            type_var_expr = TypeVarExpr(
+                 name=name,
+                 fullname=f"{self.api.cur_mod_id}.{name}",
+                 values=list(values),
+diff --git a/tools/venv b/tools/venv
+index 66477ce..f5d8599 100755
+--- a/tools/venv
++++ b/tools/venv
+@@ -19,7 +19,7 @@ manager.add_local_dep(
+     "{here}",
+     "..",
+     version_file=("extended_mypy_django_plugin", "version.py"),
+-    name="extended_mypy_django_plugin[stubs-latest,tests]=={version}",
++    name="extended_mypy_django_plugin[stubs-older,tests]=={version}",
+ )
+ 
+ manager.add_local_dep(
+-- 
+2.42.1
+

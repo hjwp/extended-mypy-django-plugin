@@ -1,0 +1,56 @@
+---
+
+name: Lint for old versions
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install patch to make this use old versions of things
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git am ./scripts/make_old.patch
+
+      - name: Install deps
+        shell: bash
+        env:
+          VENVSTARTER_ONLY_MAKE_VENV: "1"
+        run: python ./tools/venv
+
+      - name: Ensure linter is happy
+        run: ./lint
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install patch to make this use old versions of things
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git am ./scripts/make_old.patch
+
+      - name: Install deps
+        shell: bash
+        env:
+          VENVSTARTER_ONLY_MAKE_VENV: "1"
+        run: python ./tools/venv
+
+      - name: Ensure mypy is happy
+        run: ./types
