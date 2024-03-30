@@ -38,8 +38,14 @@ class TypeAnalyzing:
             )
         )
         if not concrete:
-            self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
-            return AnyType(TypeOfAny.from_error)
+            if self.sem_api.final_iteration:
+                self.api.fail(
+                    f"No concrete models found for {type_arg.type.fullname}", unbound_type
+                )
+                return AnyType(TypeOfAny.from_error)
+            else:
+                self.sem_api.defer()
+                return unbound_type
 
         return UnionType(concrete)
 
