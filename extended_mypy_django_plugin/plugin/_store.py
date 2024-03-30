@@ -3,7 +3,7 @@ from typing import Protocol
 
 from django.db import models
 from mypy.nodes import TypeInfo
-from mypy.types import Instance, UnionType
+from mypy.types import Instance, UnionType, get_proper_type
 from mypy.types import Type as MypyType
 
 QUERYSET_CLASS_FULLNAME = "django.db.models.query._QuerySet"
@@ -119,6 +119,7 @@ class Store:
         children: list[TypeInfo] = []
         if isinstance(type_var, UnionType):
             for item in type_var.items:
+                item = get_proper_type(item)
                 if not isinstance(item, Instance):
                     raise UnionMustBeOfTypes()
                 children.append(item.type)

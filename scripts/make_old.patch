@@ -1,4 +1,4 @@
-From 80485fe1ce2dad2836544fc43b75ce3a7fc4927f Mon Sep 17 00:00:00 2001
+From 764f1c8c3cd7f60df1f959880303adc3c0406b4c Mon Sep 17 00:00:00 2001
 From: Stephen Moore <stephen@delfick.com>
 Date: Sat, 30 Mar 2024 11:11:24 +1100
 Subject: [PATCH] fixup: Make mypy pass on older django-stubs/mypy
@@ -6,8 +6,9 @@ Subject: [PATCH] fixup: Make mypy pass on older django-stubs/mypy
 ---
  extended_mypy_django_plugin/plugin/_hook.py                | 4 ++--
  extended_mypy_django_plugin/plugin/actions/_sem_analyze.py | 4 ++--
+ mypy.ini                                                   | 3 +--
  tools/venv                                                 | 2 +-
- 3 files changed, 5 insertions(+), 5 deletions(-)
+ 4 files changed, 6 insertions(+), 7 deletions(-)
 
 diff --git a/extended_mypy_django_plugin/plugin/_hook.py b/extended_mypy_django_plugin/plugin/_hook.py
 index 5a0916d..c12f4c6 100644
@@ -32,10 +33,10 @@ index 5a0916d..c12f4c6 100644
                  super_hook=super_hook(fullname),
              ).hook()
 diff --git a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
-index cfb67a9..ec4f338 100644
+index bd0a843..5adf443 100644
 --- a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
 +++ b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
-@@ -70,7 +70,7 @@ class SemAnalyzing:
+@@ -72,7 +72,7 @@ class SemAnalyzing:
              self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
  
          if mypy_version_tuple >= (1, 4):
@@ -44,7 +45,7 @@ index cfb67a9..ec4f338 100644
                  name=name,
                  fullname=f"{self.api.cur_mod_id}.{name}",
                  values=list(values),
-@@ -78,7 +78,7 @@ class SemAnalyzing:
+@@ -80,7 +80,7 @@ class SemAnalyzing:
                  default=AnyType(TypeOfAny.from_omitted_generics),
              )
          else:
@@ -53,6 +54,20 @@ index cfb67a9..ec4f338 100644
                  name=name,
                  fullname=f"{self.api.cur_mod_id}.{name}",
                  values=list(values),
+diff --git a/mypy.ini b/mypy.ini
+index 455b6f6..32a7f45 100644
+--- a/mypy.ini
++++ b/mypy.ini
+@@ -12,8 +12,7 @@ exclude = (?x)(
+     )
+ 
+ plugins =
+-    extended_mypy_django_plugin.main,
+-    mypy.plugins.proper_plugin
++    extended_mypy_django_plugin.main
+ 
+ [mypy.plugins.django-stubs]
+ django_settings_module = scripts.test_settings
 diff --git a/tools/venv b/tools/venv
 index 66477ce..f5d8599 100755
 --- a/tools/venv

@@ -8,6 +8,7 @@ from mypy.types import (
     TypeVarType,
     UnboundType,
     UnionType,
+    get_proper_type,
 )
 from mypy.types import (
     Type as MypyType,
@@ -26,7 +27,7 @@ class TypeAnalyzing:
 
     def find_concrete_models(self, unbound_type: UnboundType) -> MypyType:
         args = unbound_type.args
-        type_arg = self.api.analyze_type(args[0])
+        type_arg = get_proper_type(self.api.analyze_type(args[0]))
 
         if not isinstance(type_arg, Instance):
             return UnionType(())
@@ -44,7 +45,7 @@ class TypeAnalyzing:
 
     def find_concrete_querysets(self, unbound_type: UnboundType) -> MypyType:
         args = unbound_type.args
-        type_arg = self.api.analyze_type(args[0])
+        type_arg = get_proper_type(self.api.analyze_type(args[0]))
 
         if not isinstance(type_arg, Instance):
             return UnionType(())
@@ -71,7 +72,7 @@ class TypeAnalyzing:
 
     def find_default_queryset(self, unbound_type: UnboundType) -> MypyType:
         args = unbound_type.args
-        type_arg = self.api.analyze_type(args[0])
+        type_arg = get_proper_type(self.api.analyze_type(args[0]))
 
         if isinstance(type_arg, AnyType):
             self.api.fail("Can't get default query set for Any", unbound_type)
