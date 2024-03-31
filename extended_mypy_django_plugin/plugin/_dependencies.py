@@ -14,7 +14,6 @@ from typing import Protocol
 from django.db import models
 from mypy.nodes import SymbolTableNode
 from mypy_django_plugin.django.context import DjangoContext, temp_environ
-from mypy_django_plugin.exceptions import UnregisteredModelError
 
 
 class WithDjangoContext(Protocol):
@@ -172,7 +171,7 @@ class Dependencies:
                         related_model_cls = self.plugin.django_context.get_field_related_model_cls(
                             field
                         )
-                    except UnregisteredModelError:
+                    except Exception:
                         continue
                     related_model_module = related_model_cls.__module__
                     if related_model_module != mod:
