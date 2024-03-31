@@ -1,61 +1,29 @@
-From 764f1c8c3cd7f60df1f959880303adc3c0406b4c Mon Sep 17 00:00:00 2001
+From 698a41eef557df81fc32a0ffb38d3259b9dd103a Mon Sep 17 00:00:00 2001
 From: Stephen Moore <stephen@delfick.com>
-Date: Sat, 30 Mar 2024 11:11:24 +1100
-Subject: [PATCH] fixup: Make mypy pass on older django-stubs/mypy
+Date: Mon, 1 Apr 2024 09:57:28 +1100
+Subject: [PATCH] WIP: Make it use older django-stubs
 
 ---
- extended_mypy_django_plugin/plugin/_hook.py                | 4 ++--
- extended_mypy_django_plugin/plugin/actions/_sem_analyze.py | 4 ++--
- mypy.ini                                                   | 3 +--
- tools/venv                                                 | 2 +-
- 4 files changed, 6 insertions(+), 7 deletions(-)
+ extended_mypy_django_plugin/plugin/_dependencies.py | 2 +-
+ mypy.ini                                            | 3 +--
+ tools/venv                                          | 2 +-
+ 3 files changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/extended_mypy_django_plugin/plugin/_hook.py b/extended_mypy_django_plugin/plugin/_hook.py
-index 5a0916d..c12f4c6 100644
---- a/extended_mypy_django_plugin/plugin/_hook.py
-+++ b/extended_mypy_django_plugin/plugin/_hook.py
-@@ -2,7 +2,7 @@ from __future__ import annotations
+diff --git a/extended_mypy_django_plugin/plugin/_dependencies.py b/extended_mypy_django_plugin/plugin/_dependencies.py
+index 1250878..1b98f46 100644
+--- a/extended_mypy_django_plugin/plugin/_dependencies.py
++++ b/extended_mypy_django_plugin/plugin/_dependencies.py
+@@ -40,7 +40,7 @@ class Dependencies:
+     @property
+     def model_modules(self) -> dict[str, dict[str, type[models.Model]]]:
+         model_modules = self.plugin.django_context.model_modules
+-        return model_modules
++        return {k: {cls.__name__: cls for cls in known} for k, known in model_modules.items()}
  
- import abc
- from collections.abc import Callable
--from typing import Generic, TypeAlias, TypeVar, overload
-+from typing import Generic, TypeAlias, TypeVar, cast, overload
- 
- from mypy.plugin import Plugin
- 
-@@ -66,7 +66,7 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
- 
-         def hook(fullname: str) -> Callable[[T_Ctx], T_Ret] | None:
-             return self.hook(
--                plugin=instance,
-+                plugin=cast(T_Plugin, instance),
-                 fullname=fullname,
-                 super_hook=super_hook(fullname),
-             ).hook()
-diff --git a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
-index bd0a843..5adf443 100644
---- a/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
-+++ b/extended_mypy_django_plugin/plugin/actions/_sem_analyze.py
-@@ -72,7 +72,7 @@ class SemAnalyzing:
-             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
- 
-         if mypy_version_tuple >= (1, 4):
--            type_var_expr = TypeVarExpr(
-+            type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
-                 name=name,
-                 fullname=f"{self.api.cur_mod_id}.{name}",
-                 values=list(values),
-@@ -80,7 +80,7 @@ class SemAnalyzing:
-                 default=AnyType(TypeOfAny.from_omitted_generics),
-             )
-         else:
--            type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
-+            type_var_expr = TypeVarExpr(
-                 name=name,
-                 fullname=f"{self.api.cur_mod_id}.{name}",
-                 values=list(values),
+     def for_file(self, fullname: str, super_deps: DepList) -> DepList:
+         deps = list(super_deps)
 diff --git a/mypy.ini b/mypy.ini
-index 455b6f6..32a7f45 100644
+index c305a5b..3f601bf 100644
 --- a/mypy.ini
 +++ b/mypy.ini
 @@ -12,8 +12,7 @@ exclude = (?x)(

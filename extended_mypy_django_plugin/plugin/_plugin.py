@@ -117,9 +117,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             sem_analyzing = actions.SemAnalyzing(self.store, api=ctx.api)
 
-            return sem_analyzing.transform_type_var_classmethod(
-                ctx, mypy_version_tuple=self.plugin.mypy_version_tuple
-            )
+            return sem_analyzing.transform_type_var_classmethod(ctx)
 
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):

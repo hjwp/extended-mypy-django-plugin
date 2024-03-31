@@ -23,9 +23,7 @@ class SemAnalyzing:
         self.api = api
         self.store = store
 
-    def transform_type_var_classmethod(
-        self, ctx: DynamicClassDefContext, *, mypy_version_tuple: tuple[int, int]
-    ) -> None:
+    def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         if not isinstance(ctx.call.args[0], StrExpr):
             self.api.fail(
                 "First argument to Concrete.type_var must be a string of the name of the variable",
@@ -71,21 +69,13 @@ class SemAnalyzing:
         if not values:
             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
 
-        if mypy_version_tuple >= (1, 4):
-            type_var_expr = TypeVarExpr(
-                name=name,
-                fullname=f"{self.api.cur_mod_id}.{name}",
-                values=list(values),
-                upper_bound=object_type,
-                default=AnyType(TypeOfAny.from_omitted_generics),
-            )
-        else:
-            type_var_expr = TypeVarExpr(  # type: ignore[call-arg]
-                name=name,
-                fullname=f"{self.api.cur_mod_id}.{name}",
-                values=list(values),
-                upper_bound=object_type,
-            )
+        type_var_expr = TypeVarExpr(
+            name=name,
+            fullname=f"{self.api.cur_mod_id}.{name}",
+            values=list(values),
+            upper_bound=object_type,
+            default=AnyType(TypeOfAny.from_omitted_generics),
+        )
 
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
