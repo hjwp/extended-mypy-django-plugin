@@ -13,6 +13,11 @@ getting those changes into the `django-stubs` project itself.
 
 .. _django-stubs: https://github.com/typeddjango/django-stubs
 
+Built Docs
+----------
+
+https://extended-mypy-django-plugin.readthedocs.io
+
 History
 -------
 
