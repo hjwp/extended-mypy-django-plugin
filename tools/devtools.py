@@ -1,6 +1,7 @@
 import inspect
 import os
 import shlex
+import shutil
 import sys
 import typing as tp
 from collections.abc import Callable
@@ -104,6 +105,26 @@ class App:
     @command
     def tests(self, bin_dir: Path, args: list[str]) -> None:
         run(bin_dir / "pytest", *args)
+
+    @command
+    def docs(self, bin_dir: Path, args: list[str]) -> None:
+        docs_path = here / ".." / "docs"
+        build_path = docs_path / "_build"
+        command: list[Path | str] = [bin_dir / "sphinx-build"]
+
+        other_args: list[str] = []
+        for arg in args:
+            if arg == "fresh":
+                if build_path.exists():
+                    shutil.rmtree(build_path)
+            elif arg == "view":
+                command = [bin_dir / "sphinx-autobuild", "--port", "9876"]
+            else:
+                other_args.append(arg)
+
+        os.chdir(docs_path)
+
+        run(*command, ".", "_build/html", "-b", "html", "-d", "_build/doctrees", *other_args)
 
 
 app = App()
