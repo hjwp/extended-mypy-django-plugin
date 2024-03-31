@@ -1,7 +1,9 @@
 import enum
+import sys
 from typing import Generic
 
 from mypy.checker import TypeChecker
+from mypy.modulefinder import mypy_path
 from mypy.nodes import MypyFile, TypeInfo
 from mypy.options import Options
 from mypy.plugin import (
@@ -16,13 +18,14 @@ from mypy.typeanal import TypeAnalyser
 from mypy.types import CallableType
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
+from mypy_django_plugin.django.context import DjangoContext
 from mypy_django_plugin.transformers.managers import (
     resolve_manager_method,
     resolve_manager_method_from_instance,
 )
 from typing_extensions import assert_never
 
-from . import _hook, _store, actions
+from . import _config, _dependencies, _hook, _store, actions
 
 
 class Hook(
@@ -42,12 +45,21 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         DEFAULT_QUERYSET = "extended_mypy_django_plugin.annotations.DefaultQuerySet"
 
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
-        super().__init__(options)
+        super(main.NewSemanalDjangoPlugin, self).__init__(options)
         self.mypy_version_tuple = mypy_version_tuple
+
+        self.plugin_config = _config.Config(options.config_file)
+        # Add paths from MYPYPATH env var
+        sys.path.extend(mypy_path())
+        # Add paths from mypy_path config option
+        sys.path.extend(options.mypy_path)
+
+        self.django_context = DjangoContext(self.plugin_config.django_settings_module)
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
         )
+        self.dependencies = _dependencies.Dependencies(self, self.plugin_config.project_identifier)
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(fullname)
@@ -57,11 +69,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return None
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
-        model_modules = self.django_context.model_modules
-        if file.fullname in model_modules:
-            return [(1, mod, -1) for mod in model_modules if mod != file.fullname]
-        else:
-            return []
+        return self.dependencies.for_file(
+            file.fullname, super_deps=super().get_additional_deps(file)
+        )
 
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
@@ -72,6 +82,23 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             )
 
         def run(self, ctx: ClassDefContext) -> None:
+            assert isinstance(ctx.api, SemanticAnalyzer)
+
+            if not ctx.cls.info.fullname.startswith("django."):
+                found: bool = False
+                for mod, known in self.plugin.django_context.model_modules.items():
+                    for cls in known.values():
+                        if ctx.cls.info.fullname == f"{cls.__module__}.{cls.__qualname__}":
+                            found = True
+                            break
+                    if found:
+                        break
+
+                if not found:
+                    if not ctx.api.final_iteration:
+                        ctx.api.defer()
+                    return
+
             return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
 
     @_hook.hook

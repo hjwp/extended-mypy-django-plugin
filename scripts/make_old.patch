@@ -67,7 +67,7 @@ index 455b6f6..32a7f45 100644
 +    extended_mypy_django_plugin.main
  
  [mypy.plugins.django-stubs]
- django_settings_module = scripts.test_settings
+ project_identifier = extended_django_setting
 diff --git a/tools/venv b/tools/venv
 index 66477ce..f5d8599 100755
 --- a/tools/venv
