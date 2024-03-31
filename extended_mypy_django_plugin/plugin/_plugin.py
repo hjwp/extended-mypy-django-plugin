@@ -86,7 +86,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             if not ctx.cls.info.fullname.startswith("django."):
                 found: bool = False
-                for mod, known in self.plugin.django_context.model_modules.items():
+                for mod, known in self.plugin.dependencies.model_modules.items():
                     for cls in known.values():
                         if ctx.cls.info.fullname == f"{cls.__module__}.{cls.__qualname__}":
                             found = True

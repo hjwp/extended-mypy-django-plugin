@@ -18,6 +18,7 @@ from mypy_django_plugin.django.context import DjangoContext, temp_environ
 
 class WithDjangoContext(Protocol):
     django_context: DjangoContext
+    dependencies: "Dependencies"
 
     def lookup_fully_qualified(self, fullname: str) -> SymbolTableNode | None: ...
 
@@ -37,6 +38,11 @@ class Dependencies:
         self.report_dep = f"{report_mod}.{project_identifier}"
         self.determine_model_deps()
 
+    @property
+    def model_modules(self) -> dict[str, dict[str, type[models.Model]]]:
+        model_modules = self.plugin.django_context.model_modules
+        return model_modules
+
     def for_file(self, fullname: str, super_deps: DepList) -> DepList:
         deps = list(super_deps)
 
@@ -50,7 +56,7 @@ class Dependencies:
                     try:
                         if (
                             not self.plugin.lookup_fully_qualified(dep)
-                            and dep in self.plugin.django_context.model_modules
+                            and dep in self.model_modules
                         ):
                             changed = True
                             if dep == fullname:
@@ -63,7 +69,7 @@ class Dependencies:
 
                             from django.apps import apps
 
-                            for known in self.plugin.django_context.model_modules[dep].values():
+                            for known in self.model_modules[dep].values():
                                 if known._meta.app_label in apps.all_models:
                                     by_label[known._meta.app_label].append(known)
 
@@ -135,7 +141,7 @@ class Dependencies:
         known_models: dict[str, set[str]] = defaultdict(set)
         module_objects: dict[str, types.ModuleType] = {}
 
-        for mod, known in self.plugin.django_context.model_modules.items():
+        for mod, known in self.model_modules.items():
             for name, cls in known.items():
                 if mod not in module_objects:
                     try:
@@ -244,9 +250,7 @@ class Dependencies:
             else:
                 new_hsh = hashlib.sha1(",".join(sorted(deps)).encode()).hexdigest()
             if old_hsh != new_hsh:
-                if mod in self.plugin.django_context.model_modules or any(
-                    mod in deps for _, deps in all_deps.items()
-                ):
+                if mod in self.model_modules or any(mod in deps for _, deps in all_deps.items()):
                     for import_mod in (all_deps.get(mod) or set()).union(
                         all_imports.get(mod) or set()
                     ):
