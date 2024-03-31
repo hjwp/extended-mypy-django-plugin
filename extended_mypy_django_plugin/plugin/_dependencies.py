@@ -82,9 +82,9 @@ class Dependencies:
                 name, line = mod.split(":", 1)
                 if not line.isdigit():
                     continue
-                new_dep = (30, name, int(line))
+                new_dep = (10, name, int(line))
             else:
-                new_dep = (30, mod, -1)
+                new_dep = (10, mod, -1)
 
             if new_dep not in deps:
                 deps.append(new_dep)
