@@ -3,6 +3,7 @@ import hashlib
 import importlib.resources
 import inspect
 import itertools
+import os
 import pathlib
 import sys
 import time
@@ -12,7 +13,7 @@ from typing import Protocol
 
 from django.db import models
 from mypy.nodes import SymbolTableNode
-from mypy_django_plugin.django.context import DjangoContext
+from mypy_django_plugin.django.context import DjangoContext, temp_environ
 from mypy_django_plugin.exceptions import UnregisteredModelError
 
 
@@ -40,8 +41,42 @@ class Dependencies:
     def for_file(self, fullname: str, super_deps: DepList) -> DepList:
         deps = list(super_deps)
 
-        if fullname not in self.model_dependencies:
+        changed: bool = True
+        while changed:
             self.determine_model_deps(refresh_context=True)
+            changed = False
+
+            if fullname in self.model_dependencies:
+                for _, dep, _ in deps:
+                    try:
+                        if (
+                            not self.plugin.lookup_fully_qualified(dep)
+                            and dep in self.plugin.django_context.model_modules
+                        ):
+                            changed = True
+                            if dep == fullname:
+                                break
+                            if dep in sys.modules:
+                                del sys.modules[dep]
+                            del self.plugin.django_context.model_modules
+
+                            by_label: dict[str, list[type[models.Model]]] = defaultdict(list)
+
+                            from django.apps import apps
+
+                            for known in self.plugin.django_context.model_modules[dep].values():
+                                if known._meta.app_label in apps.all_models:
+                                    by_label[known._meta.app_label].append(known)
+
+                            for label, ms in by_label.items():
+                                keys = [k for k, v in apps.all_models[label].items() if v in ms]
+                                app_models = apps.get_app_config(label).models
+                                for k in keys:
+                                    del apps.all_models[label][k]
+                                    if k in app_models:
+                                        del app_models[k]
+                    except AssertionError:
+                        pass
 
         for mod in self.model_dependencies.get(fullname, ()):
             if ":" in mod:
@@ -55,35 +90,47 @@ class Dependencies:
             if new_dep not in deps:
                 deps.append(new_dep)
 
-        if fullname in self.model_dependencies:
-            for _, dep, _ in deps:
-                try:
-                    if (
-                        not self.plugin.lookup_fully_qualified(dep)
-                        and dep in self.plugin.django_context.model_modules
-                    ):
-                        self.refresh_context()
-                        break
-                except AssertionError:
-                    pass
-
         return deps
 
-    def refresh_context(self) -> None:
-        self.plugin.django_context = self.plugin.django_context.__class__(
-            self.plugin.django_context.django_settings_module
-        )
+    def refresh_context(self, do_imports: set[str] | None = None) -> dict[str, set[str]]:
+        with temp_environ():
+            os.environ["DJANGO_SETTINGS_MODULE"] = (
+                self.plugin.django_context.django_settings_module
+            )
 
-        # Creating django context adds to sys.path without checking if it's a duplicate
-        without_duplicates: list[str] = []
-        for p in sys.path:
-            if p not in without_duplicates:
-                without_duplicates.append(p)
+            from django.apps import apps
+            from django.conf import settings
 
-        sys.path = without_duplicates
-        self.determine_model_deps()
+            apps.get_swappable_settings_name.cache_clear()  # type: ignore[attr-defined]
+            apps.clear_cache()
 
-    def determine_model_deps(self, refresh_context: bool = False) -> None:
+            self.reset_model_modules(do_imports)
+
+            if not settings.configured:
+                settings._setup()  # type: ignore[misc]
+            apps.populate(settings.INSTALLED_APPS)
+
+            assert apps.apps_ready, "Apps are not ready"
+            assert settings.configured, "Settings are not configured"
+
+        self.plugin.django_context.apps_registry = apps
+        self.plugin.django_context.settings = settings
+
+        return self.determine_model_deps(refresh_context=True)
+
+    def reset_model_modules(self, do_imports: set[str] | None = None) -> None:
+        if do_imports:
+            for mod in do_imports:
+                if mod not in sys.modules:
+                    try:
+                        importlib.import_module(mod)
+                    except ModuleNotFoundError:
+                        importlib.import_module(".".join(mod.split(".")[:-1]))
+
+        if "model_modules" in self.plugin.django_context.__dict__:
+            del self.plugin.django_context.__dict__["model_modules"]
+
+    def determine_model_deps(self, refresh_context: bool = False) -> dict[str, set[str]]:
         all_deps: dict[str, set[str]] = defaultdict(set)
         all_imports: dict[str, set[str]] = {}
         known_models: dict[str, set[str]] = defaultdict(set)
@@ -146,7 +193,11 @@ class Dependencies:
                             imports.add(alias.name)
                     elif isinstance(node, ast.ImportFrom):
                         for alias in node.names:
-                            imports.add(f"{node.module}.{alias.name}")
+                            module = node.module
+                            if module is None:
+                                module = ".".join(mod.split(".")[:-1])
+                            imports.add(module)
+                            imports.add(f"{module}.{alias.name}")
             all_imports[mod] = imports
 
         current: str = ""
@@ -171,6 +222,7 @@ class Dependencies:
             greatest_line_number = max(by_line_number.keys())
 
         need_change: bool = False
+        do_imports: set[str] = set()
         for mod, deps in all_deps.items():
             if mod in records:
                 line_number, m, old_hsh, epoch = records[mod]
@@ -193,6 +245,13 @@ class Dependencies:
             else:
                 new_hsh = hashlib.sha1(",".join(sorted(deps)).encode()).hexdigest()
             if old_hsh != new_hsh:
+                if mod in self.plugin.django_context.model_modules or any(
+                    mod in deps for _, deps in all_deps.items()
+                ):
+                    for import_mod in (all_deps.get(mod) or set()).union(
+                        all_imports.get(mod) or set()
+                    ):
+                        do_imports.add(import_mod)
                 need_change = True
                 epoch = str(time.time_ns())
             deps.add(f"{self.report_dep}:{line_number}")
@@ -209,6 +268,7 @@ class Dependencies:
                         wfile.write("\n")
 
             if refresh_context:
-                self.refresh_context()
+                all_deps = self.refresh_context(do_imports)
 
         self.model_dependencies = all_deps
+        return all_deps
