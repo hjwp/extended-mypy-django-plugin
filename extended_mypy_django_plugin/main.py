@@ -22,6 +22,13 @@ def plugin(version: str) -> type[MypyPlugin]:
     major, minor, _ = version.split(".", 2)
 
     class Plugin(ExtendedMypyStubs):
+        """
+        Mypy will complain if the plugin isn't a type, but I want to return an instance of my plugin
+        rather than the class itself, so I can pass in mypy_version_tuple.
+
+        So I abuse the `__new__` method to do so.
+        """
+
         def __new__(self, options: Options) -> "Plugin":
             instance = ExtendedMypyStubs(options, mypy_version_tuple=(int(major), int(minor)))
             return cast(Plugin, instance)
