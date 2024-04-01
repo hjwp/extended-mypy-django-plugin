@@ -41,3 +41,18 @@ Status
 This mostly works and is in a reasonable tidy state, but there needs to be a lot
 more tests created and more work done on ensuring that the ``mypy`` daemon can
 still produce the correct results as code changes.
+
+The current tasks to do next include:
+
+* Actual test coverage
+* Remake the ``Dependencies`` class to be coherent and not so messy
+
+  * Probably implement an actual graph structure that can be added and removed
+    from incrementally
+  * Remove the ``get_customize_class_mro_hook`` in favour of looking at the
+    ``Depdendencies`` hook.
+
+* Add more functionality and ensure the code works at scale
+* Potentially make it so that getting information from django context happens
+  in a subprocess so that the import space of the plugin itself is not soiled
+  by the imports from the django project (makes refreshing the context difficult)
