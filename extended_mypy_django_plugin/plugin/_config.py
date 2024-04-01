@@ -1,3 +1,8 @@
+"""
+The config class is copied from ``django-stubs`` except it also looks for a
+``python_dentifier`` option and ensures it's a valid python identifier.
+"""
+
 import configparser
 import pathlib
 import sys
@@ -80,6 +85,11 @@ class Config(DjangoPluginConfig):
 
         if not parser.has_option(section, "project_identifier"):
             exit_with_error(MISSING_PROJECT_IDENTIFIER)
+
+            if not self.project_identifier.isidentifier():
+                exit_with_error(
+                    "invalid 'project_identifier': the setting must be a valid python identifier"
+                )
 
         self.django_settings_module = parser.get(section, "django_settings_module").strip("'\"")
         self.project_identifier = parser.get(section, "project_identifier").strip("'\"")
