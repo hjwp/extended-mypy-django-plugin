@@ -28,6 +28,16 @@ DepList = list[tuple[int, str, int]]
 
 
 class Dependencies:
+    """
+    This is still under construction and is currently very messy.
+
+    It mostly works but is still broken in some ways for dmypy.
+
+    It is responsible for understanding the dependencies of models.
+
+    It creates the report file and knows how to refresh the django context.
+    """
+
     def __init__(self, plugin: WithDjangoContext, project_identifier: str) -> None:
         self.plugin = plugin
         report_mod = "extended_mypy_django_plugin.reports"
