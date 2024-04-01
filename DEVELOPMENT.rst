@@ -29,4 +29,8 @@ To activate the ``virtualenv`` in your current shell::
 
   > source run.sh activate
 
+To build the docs locally::
+
+  > ./run.sh docs view
+
 .. _venvstarter: https://venvstarter.readthedocs.io
