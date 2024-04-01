@@ -111,6 +111,9 @@ class Store:
                 )
 
     def _sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
+        """
+        Ensure there is a {"django_extended": {"all_children": []}} in the metadata
+        """
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
 
@@ -120,6 +123,9 @@ class Store:
         return info.metadata
 
     def _retrieve_all_children_from_metadata(self, parent: TypeInfo) -> list[str]:
+        """
+        Ensure the ``all_children`` in the metadata is a list and return it
+        """
         metadata = self._sync_metadata(parent)
         if not isinstance(children := metadata["django_extended"].get("all_children"), list):
             children = metadata["django_extended"]["all_children"] = []
@@ -129,6 +135,10 @@ class Store:
     def _retrieve_concrete_children_info_from_metadata(
         self, parent: TypeInfo, lookup_info: LookupFunction
     ) -> Sequence[TypeInfo]:
+        """
+        For the children recorded in the metadata for this model, return those
+        that aren't abstract
+        """
         children = self._retrieve_all_children_from_metadata(parent)
 
         ret: list[TypeInfo] = []
@@ -151,6 +161,9 @@ class Store:
         return ret
 
     def _add_child_to_metadata(self, parent: TypeInfo, child: str) -> None:
+        """
+        Record a child for this ``TypeInfo`` if it's not already recorded
+        """
         children = self._retrieve_all_children_from_metadata(parent)
         if child not in children:
             children.append(child)
@@ -158,6 +171,10 @@ class Store:
     def _get_queryset_fullnames(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction
     ) -> Iterator[tuple[str, TypeInfo]]:
+        """
+        Return the fullnames of the default querysets for the models represented
+        by this instance or Union of instances.
+        """
         children: list[TypeInfo] = []
         if isinstance(type_var, UnionType):
             for item in type_var.items:
@@ -177,6 +194,9 @@ class Store:
     def _get_dynamic_manager(
         self, model: TypeInfo, lookup_info: LookupFunction
     ) -> TypeInfo | None:
+        """
+        For some model return a custom manager if one exists
+        """
         model_cls = self._get_model_class_by_fullname(model.fullname)
         if model_cls is None:
             raise RestartDmypy()
@@ -220,6 +240,10 @@ class Store:
     def _get_dynamic_queryset_fullname(
         self, model: TypeInfo, lookup_info: LookupFunction
     ) -> str | None:
+        """
+        For this model, return the fullname of the custom queryset for the
+        default manager if there is such a custom QuerySet.
+        """
         dynamic_manager = self._get_dynamic_manager(model, lookup_info)
         if not dynamic_manager:
             model_cls = self._get_model_class_by_fullname(model.fullname)
