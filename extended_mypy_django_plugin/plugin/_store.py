@@ -51,6 +51,65 @@ class Store:
         self._get_model_class_by_fullname = get_model_class_by_fullname
         self._plugin_lookup_info = lookup_info
 
+    def retrieve_concrete_children_types(
+        self,
+        parent: TypeInfo,
+        lookup_info: LookupFunction,
+        lookup_instance: LookupInstanceFunction,
+    ) -> Sequence[MypyType]:
+        """
+        Given a ``TypeInfo`` representing some model, return ``MypyType`` objects
+        for all the concrete children related to the specified model.
+        """
+        values: list[MypyType] = []
+
+        concrete_type_infos = self._retrieve_concrete_children_info_from_metadata(
+            parent, lookup_info
+        )
+        for info in concrete_type_infos:
+            instance = lookup_instance(info.fullname)
+            if instance:
+                values.append(instance)
+
+        return values
+
+    def associate_model_heirarchy(self, fullname: str, lookup_info: LookupFunction) -> None:
+        """
+        For a particular fullname, find all the classes in it's mro (the classes
+        it inherits from) and register with those classes that this one is a
+        descendant.
+        """
+        if not fullname:
+            return None
+
+        info = lookup_info(fullname)
+        if info and len(info.mro) > 2:
+            for typ in info.mro[1:-2]:
+                self._add_child_to_metadata(typ, info.fullname)
+
+        return None
+
+    def realise_querysets(
+        self, type_var: Instance | UnionType, lookup_info: LookupFunction
+    ) -> Iterator[Instance]:
+        """
+        Given either a specific model, or a union of models, return the
+        default querysets for those models.
+        """
+        querysets = self._get_queryset_fullnames(type_var, lookup_info)
+        for fullname, model in querysets:
+            queryset = lookup_info(fullname)
+            if not queryset:
+                raise RestartDmypy()
+
+            if not queryset.is_generic():
+                yield Instance(queryset, [])
+            else:
+                yield Instance(
+                    queryset,
+                    [Instance(model, []) for _ in range(len(queryset.type_vars))],
+                )
+
     def _sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
@@ -91,48 +150,10 @@ class Store:
 
         return ret
 
-    def retrieve_concrete_children_types(
-        self,
-        parent: TypeInfo,
-        lookup_info: LookupFunction,
-        lookup_instance: LookupInstanceFunction,
-    ) -> Sequence[MypyType]:
-        """
-        Given a ``TypeInfo`` representing some model, return ``MypyType`` objects
-        for all the concrete children related to the specified model.
-        """
-        values: list[MypyType] = []
-
-        concrete_type_infos = self._retrieve_concrete_children_info_from_metadata(
-            parent, lookup_info
-        )
-        for info in concrete_type_infos:
-            instance = lookup_instance(info.fullname)
-            if instance:
-                values.append(instance)
-
-        return values
-
     def _add_child_to_metadata(self, parent: TypeInfo, child: str) -> None:
         children = self._retrieve_all_children_from_metadata(parent)
         if child not in children:
             children.append(child)
-
-    def associate_model_heirarchy(self, fullname: str, lookup_info: LookupFunction) -> None:
-        """
-        For a particular fullname, find all the classes in it's mro (the classes
-        it inherits from) and register with those classes that this one is a
-        descendant.
-        """
-        if not fullname:
-            return None
-
-        info = lookup_info(fullname)
-        if info and len(info.mro) > 2:
-            for typ in info.mro[1:-2]:
-                self._add_child_to_metadata(typ, info.fullname)
-
-        return None
 
     def _get_queryset_fullnames(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction
@@ -218,24 +239,3 @@ class Store:
             return name
 
         return None
-
-    def realise_querysets(
-        self, type_var: Instance | UnionType, lookup_info: LookupFunction
-    ) -> Iterator[Instance]:
-        """
-        Given either a specific model, or a union of models, return the
-        default querysets for those models.
-        """
-        querysets = self._get_queryset_fullnames(type_var, lookup_info)
-        for fullname, model in querysets:
-            queryset = lookup_info(fullname)
-            if not queryset:
-                raise RestartDmypy()
-
-            if not queryset.is_generic():
-                yield Instance(queryset, [])
-            else:
-                yield Instance(
-                    queryset,
-                    [Instance(model, []) for _ in range(len(queryset.type_vars))],
-                )
