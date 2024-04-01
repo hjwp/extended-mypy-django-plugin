@@ -31,6 +31,18 @@ class GetModelClassByFullname(Protocol):
 
 
 class Store:
+    """
+    The store is used to interrogate the metadata on ``TypeInfo`` objects to determine
+    the available concrete models and queryset objects when resolving the annotations
+    this plugin provides.
+
+    .. automethod:: retrieve_concrete_children_types
+
+    .. automethod:: associate_model_heirarchy
+
+    .. automethod:: realise_querysets
+    """
+
     def __init__(
         self,
         get_model_class_by_fullname: GetModelClassByFullname,
@@ -85,6 +97,10 @@ class Store:
         lookup_info: LookupFunction,
         lookup_instance: LookupInstanceFunction,
     ) -> Sequence[MypyType]:
+        """
+        Given a ``TypeInfo`` representing some model, return ``MypyType`` objects
+        for all the concrete children related to the specified model.
+        """
         values: list[MypyType] = []
 
         concrete_type_infos = self.retrieve_concrete_children_info_from_metadata(
@@ -103,6 +119,11 @@ class Store:
             children.append(child)
 
     def associate_model_heirarchy(self, fullname: str, lookup_info: LookupFunction) -> None:
+        """
+        For a particular fullname, find all the classes in it's mro (the classes
+        it inherits from) and register with those classes that this one is a
+        descendant.
+        """
         if not fullname:
             return None
 
@@ -199,6 +220,10 @@ class Store:
     def realise_querysets(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction
     ) -> Iterator[Instance]:
+        """
+        Given either a specific model, or a union of models, return the
+        default querysets for those models.
+        """
         querysets = self.get_queryset_fullnames(type_var, lookup_info)
         for fullname, model in querysets:
             queryset = lookup_info(fullname)
