@@ -143,6 +143,54 @@ is to instead say:
 
 And let the mypy plugin determine which models will make up that Union type.
 
+Custom managers and querysets
+=============================
+
+In Django, a collection of rows from the database is represented using a
+``QuerySet``. For example:
+
+.. code-block::
+
+    queryset = MyModel.objects.all()
+
+This will be an object that represents all the rows for the table represented
+by ``MyModel``. It will be typed as ``django.db.models.QuerySet[MyModel]``.
+
+Django models may be given a custom queryset using one of two methods:
+
+.. code-block:: python
+
+    from django.db import models
+
+    class MyQuerySet(models.QuerySet["MyModel"]):
+        ...
+
+
+    class MyModel(models.Model):
+        objects = MyQuerySet.as_manager()
+
+Or
+
+.. code-block:: python
+        
+    from django.db import models
+
+    class MyQuerySet(models.QuerySet["MyModel"]):
+        ...
+
+
+    MyModelManager = models.Manager.from_queryset(MyQuerySet)
+
+
+    class MyModel(models.Model):
+        objects = MyModelManager()
+
+In both these cases, the default queryset for ``MyModel`` would be
+``MyQuerySet`` rather than ``django.db.models.QuerySet[MyModel]``. This matters
+from a typing perspective because when ``mypy`` knows the specific queryset that
+should be used, then it can see any custom methods that were added to that
+queryset.
+
 Annotations
 -----------
 
