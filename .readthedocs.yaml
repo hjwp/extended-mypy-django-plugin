@@ -12,4 +12,4 @@ python:
    install:
     - requirements: tools/requirements.docs.txt
     - method: pip
-      path: .
+      path: .[stubs-latest]
