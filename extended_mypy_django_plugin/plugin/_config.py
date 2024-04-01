@@ -1,6 +1,6 @@
 """
 The config class is copied from ``django-stubs`` except it also looks for a
-``python_dentifier`` option and ensures it's a valid python identifier.
+``python_identifier`` option and ensures it's a valid python identifier.
 """
 
 import configparser
