@@ -51,7 +51,7 @@ class Store:
         self._get_model_class_by_fullname = get_model_class_by_fullname
         self._plugin_lookup_info = lookup_info
 
-    def sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
+    def _sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
         if "django_extended" not in info.metadata:
             info.metadata["django_extended"] = {}
 
@@ -60,17 +60,17 @@ class Store:
 
         return info.metadata
 
-    def retrieve_all_children_from_metadata(self, parent: TypeInfo) -> list[str]:
-        metadata = self.sync_metadata(parent)
+    def _retrieve_all_children_from_metadata(self, parent: TypeInfo) -> list[str]:
+        metadata = self._sync_metadata(parent)
         if not isinstance(children := metadata["django_extended"].get("all_children"), list):
             children = metadata["django_extended"]["all_children"] = []
 
         return children
 
-    def retrieve_concrete_children_info_from_metadata(
+    def _retrieve_concrete_children_info_from_metadata(
         self, parent: TypeInfo, lookup_info: LookupFunction
     ) -> Sequence[TypeInfo]:
-        children = self.retrieve_all_children_from_metadata(parent)
+        children = self._retrieve_all_children_from_metadata(parent)
 
         ret: list[TypeInfo] = []
         for child in children:
@@ -103,7 +103,7 @@ class Store:
         """
         values: list[MypyType] = []
 
-        concrete_type_infos = self.retrieve_concrete_children_info_from_metadata(
+        concrete_type_infos = self._retrieve_concrete_children_info_from_metadata(
             parent, lookup_info
         )
         for info in concrete_type_infos:
@@ -113,8 +113,8 @@ class Store:
 
         return values
 
-    def add_child_to_metadata(self, parent: TypeInfo, child: str) -> None:
-        children = self.retrieve_all_children_from_metadata(parent)
+    def _add_child_to_metadata(self, parent: TypeInfo, child: str) -> None:
+        children = self._retrieve_all_children_from_metadata(parent)
         if child not in children:
             children.append(child)
 
@@ -130,11 +130,11 @@ class Store:
         info = lookup_info(fullname)
         if info and len(info.mro) > 2:
             for typ in info.mro[1:-2]:
-                self.add_child_to_metadata(typ, info.fullname)
+                self._add_child_to_metadata(typ, info.fullname)
 
         return None
 
-    def get_queryset_fullnames(
+    def _get_queryset_fullnames(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction
     ) -> Iterator[tuple[str, TypeInfo]]:
         children: list[TypeInfo] = []
@@ -149,11 +149,13 @@ class Store:
 
         for child in children:
             yield (
-                self.get_dynamic_queryset_fullname(child, lookup_info) or QUERYSET_CLASS_FULLNAME,
+                self._get_dynamic_queryset_fullname(child, lookup_info) or QUERYSET_CLASS_FULLNAME,
                 child,
             )
 
-    def get_dynamic_manager(self, model: TypeInfo, lookup_info: LookupFunction) -> TypeInfo | None:
+    def _get_dynamic_manager(
+        self, model: TypeInfo, lookup_info: LookupFunction
+    ) -> TypeInfo | None:
         model_cls = self._get_model_class_by_fullname(model.fullname)
         if model_cls is None:
             raise RestartDmypy()
@@ -177,7 +179,7 @@ class Store:
             if not base_manager_info:
                 raise RestartDmypy()
 
-            metadata = self.sync_metadata(base_manager_info)
+            metadata = self._sync_metadata(base_manager_info)
 
             generated_managers: dict[str, str]
             if "from_queryset_managers" not in metadata:
@@ -194,10 +196,10 @@ class Store:
 
         return manager_info
 
-    def get_dynamic_queryset_fullname(
+    def _get_dynamic_queryset_fullname(
         self, model: TypeInfo, lookup_info: LookupFunction
     ) -> str | None:
-        dynamic_manager = self.get_dynamic_manager(model, lookup_info)
+        dynamic_manager = self._get_dynamic_manager(model, lookup_info)
         if not dynamic_manager:
             model_cls = self._get_model_class_by_fullname(model.fullname)
             if (
@@ -211,7 +213,7 @@ class Store:
                     return queryset.__module__ + "." + queryset.__qualname__
             return None
 
-        name = self.sync_metadata(dynamic_manager)["django"].get("from_queryset_manager")
+        name = self._sync_metadata(dynamic_manager)["django"].get("from_queryset_manager")
         if name is not None and isinstance(name, str):
             return name
 
@@ -224,7 +226,7 @@ class Store:
         Given either a specific model, or a union of models, return the
         default querysets for those models.
         """
-        querysets = self.get_queryset_fullnames(type_var, lookup_info)
+        querysets = self._get_queryset_fullnames(type_var, lookup_info)
         for fullname, model in querysets:
             queryset = lookup_info(fullname)
             if not queryset:
