@@ -137,6 +137,7 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
 
     def __init__(self, hook: type[Hook[T_Plugin, T_Ctx, T_Ret]]) -> None:
         self.hook = hook
+        self.__doc__ = hook.__doc__
 
     name: str
 

@@ -43,6 +43,14 @@ class Dependencies:
         model_modules = self.plugin.django_context.model_modules
         return model_modules
 
+    def is_model_known(self, fullname: str) -> bool:
+        for mod, known in self.plugin.dependencies.model_modules.items():
+            for cls in known.values():
+                if fullname == f"{cls.__module__}.{cls.__qualname__}":
+                    return True
+
+        return False
+
     def for_file(self, fullname: str, super_deps: DepList) -> DepList:
         deps = list(super_deps)
 

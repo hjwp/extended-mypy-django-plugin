@@ -39,6 +39,26 @@ class Hook(
 
 
 class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
+    """
+    The ``ExtendedMypyStubs`` mypy plugin extends the
+    ``mypy_django_plugin.main.NewSemanalDjangoPlugin`` found in the active python
+    environment.
+
+    It implements the following mypy plugin hooks:
+
+    .. automethod:: get_additional_deps
+
+    .. autoattribute:: get_customize_class_mro_hook
+
+    .. autoattribute:: get_dynamic_class_hook
+
+    .. autoattribute:: get_type_analyze_hook
+
+    .. autoattribute:: get_function_hook
+
+    .. autoattribute:: get_attribute_hook
+    """
+
     class Annotations(enum.Enum):
         CONCRETE = "extended_mypy_django_plugin.annotations.Concrete"
         CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
@@ -69,12 +89,27 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return None
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
+        """
+        Ensure that models are re-analyzed if any other models that depend on
+        them change.
+
+        We use a generated "report" to re-analyze a file if a new dependency
+        is discovered after this file has been processed.
+        """
         return self.dependencies.for_file(
             file.fullname, super_deps=super().get_additional_deps(file)
         )
 
     @_hook.hook
     class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
+        """
+        For any class that is a model, we want to record an association between
+        abstract and concrete models.
+
+        This hook will find those classes and ensure the ``TypeInfo`` objects
+        for them will have metadata expressing this relationship.
+        """
+
         def choose(self) -> bool:
             sym = self.plugin._lookup_info(self.fullname)
             return self.fullname != _store.MODEL_CLASS_FULLNAME and bool(
@@ -85,15 +120,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api, SemanticAnalyzer)
 
             if not ctx.cls.info.fullname.startswith("django."):
-                found: bool = False
-                for mod, known in self.plugin.dependencies.model_modules.items():
-                    for cls in known.values():
-                        if ctx.cls.info.fullname == f"{cls.__module__}.{cls.__qualname__}":
-                            found = True
-                            break
-                    if found:
-                        break
-
+                found = self.plugin.dependencies.is_model_known(ctx.cls.info.fullname)
                 if not found:
                     if not ctx.api.final_iteration:
                         ctx.api.defer()
@@ -103,6 +130,19 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     @_hook.hook
     class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):
+        """
+        This is used to find ``Concrete.type_var`` and turn that into a ``TypeVar``
+        representing each Concrete class of the abstract model provided.
+
+        So say we find::
+
+            T_Child = Concrete.type_var("T_Child", Parent)
+
+        Then we turn that into::
+
+            T_Child = TypeVar("T_Child", Child1, Child2, Child3)
+        """
+
         def choose(self) -> bool:
             class_name, _, method_name = self.fullname.rpartition(".")
             if method_name == "type_var":
@@ -121,6 +161,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
+        """
+        Resolve classes annotated with ``Concrete``, ``ConcreteQuerySet`` and
+        ``DefaultQuerySet``.
+        """
+
         def choose(self) -> bool:
             return any(
                 member.value == self.fullname
@@ -151,6 +196,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
+        """
+        Find functions that return a ``DefaultQuerySet`` annotation and resolve
+        the annotation.
+        """
+
         def choose(self) -> bool:
             sym = self.plugin.lookup_fully_qualified(self.fullname)
             if not sym or not sym.node:
@@ -175,6 +225,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
+        """
+        An implementation of the change found in
+        https://github.com/typeddjango/django-stubs/pull/2027
+        """
+
         def choose(self) -> bool:
             return self.super_hook is resolve_manager_method
 
