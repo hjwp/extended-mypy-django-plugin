@@ -1,0 +1,14 @@
+- case: simple_annotation
+  out: |
+     main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from myapp.models import Parent
+
+    models: Concrete[Parent]
+    reveal_type(models)
+  followups:
+    - installed_apps: ["myapp"]
+      out: |
+        main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"

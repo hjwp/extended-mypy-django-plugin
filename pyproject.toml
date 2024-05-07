@@ -15,7 +15,7 @@ authors = [
 [project.optional-dependencies]
 tests = [
     "pytest==8.1.1",
-    "pytest-mypy-plugins==3.1.1",
+    "pytest-mypy-plugins @ git+https://github.com/delfick/pytest-mypy-plugins@scenarios/followups"
 ]
 stubs-latest = [
     "mypy==1.9.0",
@@ -25,6 +25,9 @@ stubs-older = [
     "mypy==1.4.0",
     "django-stubs==4.2.3",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 path = "extended_mypy_django_plugin/version.py"
