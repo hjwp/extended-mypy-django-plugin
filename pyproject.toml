@@ -61,3 +61,4 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "example/djangoexample/views.py" = ["F821"]
+"extended_mypy_django_plugin/plugin/_debug.py" = ["T201"]
