@@ -45,6 +45,11 @@ class Hooks(ScenarioHooks):
         installed_apps = additional_properties.get("installed_apps", None)
         monkeypatch = additional_properties.get("monkeypatch", None)
 
+        if "debug" in additional_properties:
+            pathlib.Path("/tmp/debug").write_text("")
+        else:
+            pathlib.Path("/tmp/debug").unlink(missing_ok=True)
+
         current_settings: pathlib.Path = scenario.path_for("mysettings.py")
 
         if custom_settings is None and installed_apps is None and monkeypatch is None:
