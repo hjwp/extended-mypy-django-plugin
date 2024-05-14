@@ -78,17 +78,28 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         sys.path.extend(options.mypy_path)
 
         self.running_in_daemon: bool = "dmypy" in sys.argv[0]
-        self.report = _reports.Report(
-            django_settings_module=self.plugin_config.django_settings_module,
+        self.report = _reports.Reports.create(
             installed_apps_script=self.plugin_config.installed_apps_script,
+            django_settings_module=self.plugin_config.django_settings_module,
+            scratch_path=self.plugin_config.scratch_path,
         )
 
         self.django_context = DjangoContext(self.plugin_config.django_settings_module)
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
+            django_context_model_modules=self.django_context.model_modules,
         )
-        self.dependencies = _dependencies.Dependencies(self, self.plugin_config.scratch_path)
+
+        self.dependencies = _dependencies.Dependencies(
+            model_modules=self.store.model_modules,
+            report_names_getter=self.report.report_names_getter(
+                installed_apps=self.django_context.settings.INSTALLED_APPS,
+                model_modules=self.store.model_modules,
+                get_model_related_fields=self.django_context.get_model_related_fields,
+                get_field_related_model_cls=self.django_context.get_field_related_model_cls,
+            ),
+        )
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(fullname)
@@ -104,7 +115,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         This lets us tell dmypy to restart itself as necessary.
         """
         if not self.running_in_daemon:
-            self._last_version_hash = "1"
+            self._last_version_hash = f"1.{self.report.lines_hash()}"
         else:
             version_hash = self.report.determine_version_hash()
             if not hasattr(self, "_last_version_hash"):
@@ -125,7 +136,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         is discovered after this file has been processed.
         """
         return self.dependencies.for_file(
-            file.fullname, super_deps=super().get_additional_deps(file)
+            file.fullname, imports=file.imports, super_deps=super().get_additional_deps(file)
         )
 
     @_hook.hook

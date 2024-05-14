@@ -1,32 +1,18 @@
-From d5815f8500af90e08efeb09b9976b650765d902b Mon Sep 17 00:00:00 2001
+From 1bcf8de83cd1de01f8e293cad5beb0137dc13991 Mon Sep 17 00:00:00 2001
 From: Stephen Moore <stephen@delfick.com>
 Date: Mon, 1 Apr 2024 13:56:22 +1100
 Subject: [PATCH] WIP: Make it for the old
 
 ---
- extended_mypy_django_plugin/plugin/_dependencies.py | 2 +-
- mypy.ini                                            | 3 +--
- tools/venv                                          | 2 +-
- 3 files changed, 3 insertions(+), 4 deletions(-)
+ mypy.ini   | 3 +--
+ tools/venv | 2 +-
+ 2 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/extended_mypy_django_plugin/plugin/_dependencies.py b/extended_mypy_django_plugin/plugin/_dependencies.py
-index 0e99dca..b5e94ae 100644
---- a/extended_mypy_django_plugin/plugin/_dependencies.py
-+++ b/extended_mypy_django_plugin/plugin/_dependencies.py
-@@ -41,7 +41,7 @@ class Dependencies:
-     @property
-     def model_modules(self) -> dict[str, dict[str, type[models.Model]]]:
-         model_modules = self.plugin.django_context.model_modules
--        return model_modules
-+        return {k: {cls.__name__: cls for cls in known} for k, known in model_modules.items()}
- 
-     def is_model_known(self, fullname: str) -> bool:
-         for mod, known in self.plugin.dependencies.model_modules.items():
 diff --git a/mypy.ini b/mypy.ini
-index c305a5b..3f601bf 100644
+index 6cd5c61..066cf35 100644
 --- a/mypy.ini
 +++ b/mypy.ini
-@@ -12,8 +12,7 @@ exclude = (?x)(
+@@ -13,8 +13,7 @@ exclude = (?x)(
      )
  
  plugins =
@@ -50,5 +36,5 @@ index b84fdfa..1bbec65 100755
  
  manager.add_local_dep(
 -- 
-2.42.1
+2.44.0
 

@@ -1,4 +1,5 @@
 import ast
+import dataclasses
 import os
 import pathlib
 import runpy
@@ -45,6 +46,8 @@ class Hooks(ScenarioHooks):
         copied_apps = additional_properties.get("copied_apps", None)
         installed_apps = additional_properties.get("installed_apps", None)
         monkeypatch = additional_properties.get("monkeypatch", None)
+
+        options = dataclasses.replace(options, start=["."])
 
         if "debug" in additional_properties:
             pathlib.Path("/tmp/debug").write_text("")

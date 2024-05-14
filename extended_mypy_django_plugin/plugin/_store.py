@@ -1,10 +1,12 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Protocol
 
 from django.db import models
 from mypy.nodes import TypeInfo
 from mypy.types import Instance, UnionType, get_proper_type
 from mypy.types import Type as MypyType
+
+from ._reports import ModelModules
 
 QUERYSET_CLASS_FULLNAME = "django.db.models.query._QuerySet"
 MODEL_CLASS_FULLNAME = "django.db.models.base.Model"
@@ -44,10 +46,15 @@ class Store:
     """
 
     def __init__(
-        self, get_model_class_by_fullname: GetModelClassByFullname, lookup_info: LookupFunction
+        self,
+        get_model_class_by_fullname: GetModelClassByFullname,
+        lookup_info: LookupFunction,
+        django_context_model_modules: Mapping[str, object],
     ) -> None:
         self._get_model_class_by_fullname = get_model_class_by_fullname
         self._plugin_lookup_info = lookup_info
+        self._django_context_model_modules = django_context_model_modules
+        self.model_modules = self._determine_model_modules()
 
     def retrieve_concrete_children_types(
         self,
@@ -107,6 +114,22 @@ class Store:
                     queryset,
                     [Instance(model, []) for _ in range(len(queryset.type_vars))],
                 )
+
+    def _determine_model_modules(self) -> ModelModules:
+        """
+        Old version of django-stubs has this as a different datastructure
+        """
+        result: dict[str, dict[str, type[models.Model]]] = {}
+        for k, v in self._django_context_model_modules.items():
+            if isinstance(v, dict):
+                result[k] = v
+            elif isinstance(v, set):
+                result[k] = {
+                    cls.__name__: cls
+                    for cls in v
+                    if isinstance(cls, type) and issubclass(cls, models.Model)
+                }
+        return result
 
     def _sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
         """

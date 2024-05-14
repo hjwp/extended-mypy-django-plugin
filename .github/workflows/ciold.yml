@@ -38,9 +38,9 @@ jobs:
         shell: bash
         run: ./test.sh -v --mypy-cache-strategy NO_INCREMENTAL
 
-      # - name: Run tests incremental
-      #   shell: bash
-      #   run: ./test.sh -v --mypy-cache-strategy NON_SHARED_INCREMENTAL
+      - name: Run tests incremental
+        shell: bash
+        run: ./test.sh -v --mypy-cache-strategy NON_SHARED_INCREMENTAL
 
       - name: Run tests daemon
         shell: bash
