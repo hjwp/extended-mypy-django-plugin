@@ -10,7 +10,7 @@ Enabling this plugin in a project is adding either to ``mypy.ini``::
         extended_mypy_django_plugin.main
 
     [mypy.plugins.django-stubs]
-    project_identifier = some_valid_python_identifier
+    scratch_path = ./path/relative/to/config/where/information/is/cached
     django_settings_module = some_valid_import_path_to_django_settings
 
 Or to ``pyproject.toml``::
@@ -19,9 +19,9 @@ Or to ``pyproject.toml``::
     plugins = ["extended_mypy_django_plugin.main"]
 
     [tool.django-stubs]
-    project_identifier = "some_valid_python_identifier"
+    scratch_path = "./path/relative/to/config/where/information/is/cached"
     django_settings_module = "some_valid_import_path_to_django_settings"
 
-.. note:: This project adds a mandatory setting ``project_identifier`` that
-   needs to be a valid python identifier, and unique to your project within
-   the python environment this plugin is installed in.
+.. note:: This project adds a mandatory setting ``scratch_path`` that
+   will be a path relative to the config file where the mypy plugin will write
+   files to for the purpose of understanding when files need to be re-analyzed.

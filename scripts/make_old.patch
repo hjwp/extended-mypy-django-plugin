@@ -35,7 +35,7 @@ index c305a5b..3f601bf 100644
 +    extended_mypy_django_plugin.main
  
  [mypy.plugins.django-stubs]
- project_identifier = extended_django_setting
+ scratch_path = ./.mypy_django_scratch/main
 diff --git a/tools/venv b/tools/venv
 index b84fdfa..1bbec65 100755
 --- a/tools/venv

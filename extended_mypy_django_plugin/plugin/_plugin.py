@@ -79,7 +79,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
         )
-        self.dependencies = _dependencies.Dependencies(self, self.plugin_config.project_identifier)
+        self.dependencies = _dependencies.Dependencies(self, self.plugin_config.scratch_path)
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(fullname)

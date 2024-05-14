@@ -24,13 +24,13 @@ if sys.version_info[:2] >= (3, 11):
 else:
     import tomli as tomllib
 
-MISSING_PROJECT_IDENTIFIER = "missing required 'project_identifier' config"
+MISSING_SCRATCH_PATH = "missing required 'scratch_path' config"
 INVALID_BOOL_SETTING = "invalid {key!r}: the setting must be a boolean"
 
 
 class Config(DjangoPluginConfig):
-    __slots__ = ("django_settings_module", "strict_settings", "project_identifier")
-    project_identifier: str
+    __slots__ = ("django_settings_module", "strict_settings", "scratch_path")
+    scratch_path: Path
 
     def parse_toml_file(self, filepath: pathlib.Path) -> None:
         toml_exit: Callable[[str], NoReturn] = partial(exit_with_error, is_toml=True)
@@ -48,21 +48,17 @@ class Config(DjangoPluginConfig):
         if "django_settings_module" not in config:
             toml_exit(MISSING_DJANGO_SETTINGS)
 
-        if "project_identifier" not in config:
-            toml_exit(MISSING_PROJECT_IDENTIFIER)
+        if "scratch_path" not in config:
+            toml_exit(MISSING_SCRATCH_PATH)
 
         self.django_settings_module = config["django_settings_module"]
         if not isinstance(self.django_settings_module, str):
             toml_exit("invalid 'django_settings_module': the setting must be a string")
 
-        self.project_identifier = config["django_settings_module"]
-        if not isinstance(self.project_identifier, str):
-            toml_exit("invalid 'project_identifier': the setting must be a string")
-
-            if not self.project_identifier.isidentifier():
-                toml_exit(
-                    "invalid 'project_identifier': the setting must be a valid python identifier"
-                )
+        if not isinstance(config["scratch_path"], str):
+            toml_exit("invalid 'scratch_path': the setting must be a string")
+        self.scratch_path = filepath.parent / config["scratch_path"]
+        self.scratch_path.mkdir(parents=True, exist_ok=True)
 
         self.strict_settings = config.get("strict_settings", True)
         if not isinstance(self.strict_settings, bool):
@@ -83,16 +79,13 @@ class Config(DjangoPluginConfig):
         if not parser.has_option(section, "django_settings_module"):
             exit_with_error(MISSING_DJANGO_SETTINGS)
 
-        if not parser.has_option(section, "project_identifier"):
-            exit_with_error(MISSING_PROJECT_IDENTIFIER)
-
-            if not self.project_identifier.isidentifier():
-                exit_with_error(
-                    "invalid 'project_identifier': the setting must be a valid python identifier"
-                )
+        if not parser.has_option(section, "scratch_path"):
+            exit_with_error(MISSING_SCRATCH_PATH)
 
         self.django_settings_module = parser.get(section, "django_settings_module").strip("'\"")
-        self.project_identifier = parser.get(section, "project_identifier").strip("'\"")
+
+        self.scratch_path = filepath.parent / parser.get(section, "scratch_path").strip("'\"")
+        self.scratch_path.mkdir(parents=True, exist_ok=True)
 
         try:
             self.strict_settings = parser.getboolean(section, "strict_settings", fallback=True)
@@ -103,6 +96,6 @@ class Config(DjangoPluginConfig):
         """We use this method to reset mypy cache via `report_config_data` hook."""
         return {
             "django_settings_module": self.django_settings_module,
-            "project_identifier": self.project_identifier,
+            "scratch_path": str(self.scratch_path),
             "strict_settings": self.strict_settings,
         }

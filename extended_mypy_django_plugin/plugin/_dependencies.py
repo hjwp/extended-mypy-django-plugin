@@ -38,14 +38,13 @@ class Dependencies:
     It creates the report file and knows how to refresh the django context.
     """
 
-    def __init__(self, plugin: WithDjangoContext, project_identifier: str) -> None:
+    def __init__(self, plugin: WithDjangoContext, reports_dir: pathlib.Path) -> None:
         self.plugin = plugin
-        report_mod = "extended_mypy_django_plugin.reports"
-        with importlib.resources.as_file(
-            importlib.resources.files(report_mod) / f"{project_identifier}.py"
-        ) as path:
-            self.report_file = pathlib.Path(path)
-        self.report_dep = f"{report_mod}.{project_identifier}"
+        report_mod = "__virtual_extended_mypy_django_plugin_report__"
+        self.reports_dir = reports_dir / report_mod
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
+        self.report_file = self.reports_dir / "lines.py"
+        self.report_dep = f"{report_mod}.lines"
         self.determine_model_deps()
 
     @property
