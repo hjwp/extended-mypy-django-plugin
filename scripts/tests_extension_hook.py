@@ -1,4 +1,5 @@
 import ast
+import dataclasses
 import os
 import pathlib
 import runpy
@@ -42,6 +43,7 @@ class Hooks(ScenarioHooks):
         additional_properties: Mapping[str, object],
     ) -> ScenarioHooksRunAndCheckOptions:
         custom_settings = additional_properties.get("custom_settings", None)
+        copied_apps = additional_properties.get("copied_apps", None)
         installed_apps = additional_properties.get("installed_apps", None)
         monkeypatch = additional_properties.get("monkeypatch", None)
 
@@ -49,6 +51,11 @@ class Hooks(ScenarioHooks):
             pathlib.Path("/tmp/debug").write_text("")
         else:
             pathlib.Path("/tmp/debug").unlink(missing_ok=True)
+
+        if isinstance(copied_apps, list):
+            for app in copied_apps:
+                if isinstance(app, str):
+                    self._copy_app(scenario, app)
 
         current_settings: pathlib.Path = scenario.path_for("mysettings.py")
 
@@ -131,26 +138,21 @@ class Hooks(ScenarioHooks):
         if not isinstance(installed_apps, list):
             installed_apps = []
 
-        if "myapp" in installed_apps:
-            for root, _, files in os.walk(here / "myapp"):
-                for name in files:
-                    location = pathlib.Path(root, name)
-                    scenario.handle_followup_file(
-                        FollowupFile(
-                            path=str(location.relative_to(here)), content=location.read_text()
-                        )
-                    )
-        if "myapp2" in installed_apps:
-            for root, _, files in os.walk(here / "myapp2"):
-                for name in files:
-                    location = pathlib.Path(root, name)
-                    scenario.handle_followup_file(
-                        FollowupFile(
-                            path=str(location.relative_to(here)), content=location.read_text()
-                        )
-                    )
+        for app in installed_apps:
+            if (here / app).exists():
+                self._copy_app(scenario, app)
 
         return options
+
+    def _copy_app(self, scenario: MypyPluginsScenario, app: str) -> None:
+        for root, _, files in os.walk(here / app):
+            for name in files:
+                location = pathlib.Path(root, name)
+                path = location.relative_to(here)
+                if not (pathlib.Path.cwd() / path).exists():
+                    scenario.handle_followup_file(
+                        FollowupFile(path=str(path), content=location.read_text())
+                    )
 
 
 if TYPE_CHECKING:
