@@ -32,6 +32,10 @@ class GetModelClassByFullname(Protocol):
     def __call__(self, fullname: str) -> type[models.Model] | None: ...
 
 
+class IsInstalledModel(Protocol):
+    def __call__(self, instance: Instance) -> bool: ...
+
+
 class Store:
     """
     The store is used to interrogate the metadata on ``TypeInfo`` objects to determine
@@ -50,10 +54,12 @@ class Store:
         get_model_class_by_fullname: GetModelClassByFullname,
         lookup_info: LookupFunction,
         django_context_model_modules: Mapping[str, object],
+        is_installed_model: IsInstalledModel,
     ) -> None:
         self._get_model_class_by_fullname = get_model_class_by_fullname
         self._plugin_lookup_info = lookup_info
         self._django_context_model_modules = django_context_model_modules
+        self._is_installed_model = is_installed_model
         self.model_modules = self._determine_model_modules()
 
     def retrieve_concrete_children_types(
@@ -73,7 +79,7 @@ class Store:
         )
         for info in concrete_type_infos:
             instance = lookup_instance(info.fullname)
-            if instance:
+            if instance and self._is_installed_model(instance):
                 values.append(instance)
 
         return values

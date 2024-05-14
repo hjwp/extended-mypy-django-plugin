@@ -8,9 +8,58 @@
 
     models: Concrete[Parent]
     reveal_type(models)
+
+- case: sees_apps_removed_when_they_still_exist_but_no_longer_installed
+  out: |
+     main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from myapp.models import Parent
+
+    models: Concrete[Parent]
+    reveal_type(models)
   followups:
     - installed_apps: ["myapp"]
       out: |
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"
+
+- case: does_not_see_apps_that_exist_but_are_not_installed
+  installed_apps: ["myapp"]
+  copied_apps: ["myapp", "myapp2"]
+  out: ""
+  main: |
+      from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+      from myapp.models import Parent
+
+      model: Concrete[Parent]
+      model.concrete_from_myapp
+  followups:
+    # but become available after being installed
+    - out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
+        main:6: error: Item "ChildOther" of "Child1 | Child2 | Child3 | ChildOther" has no attribute "concrete_from_myapp"  [union-attr]
+      installed_apps: ["myapp", "myapp2"]
+
+- case: sees_models_when_they_are_added_and_installed
+  installed_apps: ["myapp"]
+  out: |
+     main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from myapp.models import Parent
+
+    models: Concrete[Parent]
+    reveal_type(models)
+  followups:
+    # but become available after being installed
+    - installed_apps: ["myapp", "myapp2"]
+      out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
+        main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"

@@ -16,7 +16,7 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType
+from mypy.types import CallableType, Instance
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -89,6 +89,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
             django_context_model_modules=self.django_context.model_modules,
+            is_installed_model=self._is_installed_model,
         )
 
         self.dependencies = _dependencies.Dependencies(
@@ -100,6 +101,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 get_field_related_model_cls=self.django_context.get_field_related_model_cls,
             ),
         )
+
+    def _is_installed_model(self, instance: Instance) -> bool:
+        return self.dependencies.is_model_known(instance.type.fullname)
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(fullname)
@@ -157,14 +161,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
         def run(self, ctx: ClassDefContext) -> None:
             assert isinstance(ctx.api, SemanticAnalyzer)
-
-            if not ctx.cls.info.fullname.startswith("django."):
-                found = self.plugin.dependencies.is_model_known(ctx.cls.info.fullname)
-                if not found:
-                    if not ctx.api.final_iteration:
-                        ctx.api.defer()
-                    return
-
             return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
 
     @_hook.hook
