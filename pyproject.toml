@@ -18,8 +18,8 @@ tests = [
     "pytest-mypy-plugins @ git+https://github.com/delfick/pytest-mypy-plugins@scenarios/followups"
 ]
 stubs-latest = [
-    "mypy==1.9.0",
-    "django-stubs==4.2.7",
+    "mypy==1.10.0",
+    "django-stubs==5.0.0",
 ]
 stubs-older = [
     "mypy==1.4.0",
