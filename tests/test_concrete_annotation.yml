@@ -11,4 +11,6 @@
   followups:
     - installed_apps: ["myapp"]
       out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"

@@ -1,10 +1,3 @@
-import importlib
-import pathlib
-import shlex
-import stat
-import subprocess
-import sys
-import tempfile
 from collections.abc import Iterator, Sequence
 from typing import Protocol
 
@@ -51,27 +44,10 @@ class Store:
     """
 
     def __init__(
-        self,
-        get_model_class_by_fullname: GetModelClassByFullname,
-        lookup_info: LookupFunction,
-        installed_apps_script: pathlib.Path | None,
-        django_settings_module: str,
-        running_in_daemon: bool,
+        self, get_model_class_by_fullname: GetModelClassByFullname, lookup_info: LookupFunction
     ) -> None:
         self._get_model_class_by_fullname = get_model_class_by_fullname
         self._plugin_lookup_info = lookup_info
-        self._django_settings_module = django_settings_module
-        self._running_in_daemon = running_in_daemon
-        self._installed_apps_script = installed_apps_script
-
-        if installed_apps_script is not None:
-            if not installed_apps_script.exists():
-                raise ValueError("The provided script for finding installed apps does not exist")
-
-            if not installed_apps_script.stat().st_mode & stat.S_IXUSR:
-                raise ValueError(
-                    "The provided script for finding installed apps is not executable!"
-                )
 
     def retrieve_concrete_children_types(
         self,
@@ -131,51 +107,6 @@ class Store:
                     queryset,
                     [Instance(model, []) for _ in range(len(queryset.type_vars))],
                 )
-
-    def determine_installed_apps(self) -> list[str]:
-        if not self._running_in_daemon:
-            # We don't need to waste the CPU cycles when not in daemon mode
-            return []
-
-        with tempfile.NamedTemporaryFile() as result_file:
-            if self._installed_apps_script is not None:
-                script = self._installed_apps_script
-            else:
-                script = pathlib.Path(
-                    str(
-                        importlib.resources.files("extended_mypy_django_plugin")
-                        / "scripts"
-                        / "get_installed_apps.py"
-                    )
-                )
-
-            cmd: list[str] = []
-
-            if script.suffix == ".py":
-                cmd.append(sys.executable)
-            else:
-                with open(script) as fle:
-                    line = fle.readline()
-                    if line.startswith("#!"):
-                        cmd.extend(shlex.split(line[2:]))
-
-            cmd.extend(
-                [
-                    str(script),
-                    "--django-settings-module",
-                    self._django_settings_module,
-                    "--apps-file",
-                    result_file.name,
-                ]
-            )
-
-            subprocess.run(cmd, capture_output=True, check=True)
-
-            return [
-                app.strip()
-                for app in pathlib.Path(result_file.name).read_text().split("\n")
-                if app.strip()
-            ]
 
     def _sync_metadata(self, info: TypeInfo) -> dict[str, dict[str, object]]:
         """
