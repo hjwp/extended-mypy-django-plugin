@@ -74,10 +74,15 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         # Add paths from mypy_path config option
         sys.path.extend(options.mypy_path)
 
+        self.running_in_daemon: bool = "dmypy" in sys.argv[0]
+
         self.django_context = DjangoContext(self.plugin_config.django_settings_module)
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
+            django_settings_module=self.plugin_config.django_settings_module,
+            installed_apps_script=self.plugin_config.installed_apps_script,
+            running_in_daemon=self.running_in_daemon,
         )
         self.dependencies = _dependencies.Dependencies(self, self.plugin_config.scratch_path)
 

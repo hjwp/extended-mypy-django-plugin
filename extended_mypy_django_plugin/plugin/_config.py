@@ -29,8 +29,14 @@ INVALID_BOOL_SETTING = "invalid {key!r}: the setting must be a boolean"
 
 
 class Config(DjangoPluginConfig):
-    __slots__ = ("django_settings_module", "strict_settings", "scratch_path")
+    __slots__ = (
+        "django_settings_module",
+        "strict_settings",
+        "scratch_path",
+        "installed_apps_script",
+    )
     scratch_path: Path
+    installed_apps_script: Path | None
 
     def parse_toml_file(self, filepath: pathlib.Path) -> None:
         toml_exit: Callable[[str], NoReturn] = partial(exit_with_error, is_toml=True)
@@ -60,6 +66,13 @@ class Config(DjangoPluginConfig):
         self.scratch_path = filepath.parent / config["scratch_path"]
         self.scratch_path.mkdir(parents=True, exist_ok=True)
 
+        if "installed_apps_path" in config:
+            if not isinstance(config["installed_apps_script"], str):
+                toml_exit("invalid 'installed_apps_script': the setting must be a string")
+            self.installed_apps_script = filepath.parent / config["installed_apps_script"]
+        else:
+            self.installed_apps_script = None
+
         self.strict_settings = config.get("strict_settings", True)
         if not isinstance(self.strict_settings, bool):
             toml_exit(INVALID_BOOL_SETTING.format(key="strict_settings"))
@@ -87,6 +100,13 @@ class Config(DjangoPluginConfig):
         self.scratch_path = filepath.parent / parser.get(section, "scratch_path").strip("'\"")
         self.scratch_path.mkdir(parents=True, exist_ok=True)
 
+        if parser.has_option(section, "installed_apps_script"):
+            self.installed_apps_script = filepath.parent / parser.get(
+                section, "installed_apps_script"
+            ).strip("'\"")
+        else:
+            self.installed_apps_script = None
+
         try:
             self.strict_settings = parser.getboolean(section, "strict_settings", fallback=True)
         except ValueError:
@@ -97,5 +117,8 @@ class Config(DjangoPluginConfig):
         return {
             "django_settings_module": self.django_settings_module,
             "scratch_path": str(self.scratch_path),
+            "installed_apps_script": (
+                None if self.installed_apps_script is None else str(self.installed_apps_script)
+            ),
             "strict_settings": self.strict_settings,
         }

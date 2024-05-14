@@ -1,3 +1,4 @@
+import zlib
 from typing import cast
 
 from mypy.options import Options
@@ -9,13 +10,23 @@ from .plugin import ExtendedMypyStubs
 # dmypy will recall "plugin" below which will
 # make a new plugin, but without necessarily replacing
 # existing plugin hooks, which is confusing
-created: bool = False
+created: ExtendedMypyStubs | None = None
+last_installed_apps: list[str] = []
+version_prefix: str = "1"
+
+__version__: str = version_prefix
 
 
 def plugin(version: str) -> type[MypyPlugin]:
     global created
-    if created:
+    global __version__
+    global last_installed_apps
+
+    if created is not None:
         # Inside dmypy, don't create a new plugin
+        installed_apps = created.store.determine_installed_apps()
+        if last_installed_apps != installed_apps:
+            __version__ = f"{version_prefix}.{zlib.adler32('\n'.join(installed_apps).encode())}"
         return MypyPlugin
 
     created = True
@@ -30,7 +41,8 @@ def plugin(version: str) -> type[MypyPlugin]:
         """
 
         def __new__(self, options: Options) -> "Plugin":
-            instance = ExtendedMypyStubs(options, mypy_version_tuple=(int(major), int(minor)))
-            return cast(Plugin, instance)
+            global created
+            created = ExtendedMypyStubs(options, mypy_version_tuple=(int(major), int(minor)))
+            return cast(Plugin, created)
 
     return Plugin
