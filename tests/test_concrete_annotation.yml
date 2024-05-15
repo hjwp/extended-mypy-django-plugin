@@ -63,3 +63,32 @@
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+
+- case: sees_new_models
+  out: ""
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from myapp.models import Parent
+
+    models: Concrete[Parent]
+    models.two
+  followups:
+    # but become available after being installed
+    - files:
+        - path: myapp2/models.py
+          content: |
+            from django.db import models
+            from myapp.models import Parent
+
+
+            class ChildOther(Parent):
+                two = models.CharField(max_length=60)
+
+            class Another(Parent):
+                pass
+      debug: true
+      out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
+        main:6: error: Item "Another" of "Child1 | Child2 | Child3 | ChildOther | Another" has no attribute "two"  [union-attr]

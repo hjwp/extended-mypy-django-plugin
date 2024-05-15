@@ -235,6 +235,8 @@ class _DepFinder:
                 self.module_objects[mod] = mod_obj
 
     def _find_models_in_mro(self, mod: str, cls: type[models.Model]) -> None:
+        self.known_models[mod].add(f"{cls.__module__}.{cls.__qualname__}")
+
         for mro in cls.mro():
             if mro is cls:
                 continue
@@ -345,7 +347,9 @@ class Reports:
         return str(zlib.adler32(self._store.lines_file.read_bytes()))
 
     def determine_version_hash(self) -> str:
-        with tempfile.NamedTemporaryFile() as result_file:
+        result_file_cm = tempfile.NamedTemporaryFile()
+        known_models_file_cm = tempfile.NamedTemporaryFile()
+        with result_file_cm as result_file, known_models_file_cm as known_models_file:
             if self._installed_apps_script is not None:
                 script = self._installed_apps_script
             else:
@@ -374,12 +378,17 @@ class Reports:
                     self._django_settings_module,
                     "--apps-file",
                     result_file.name,
+                    "--known-models-file",
+                    known_models_file.name,
                 ]
             )
 
             subprocess.run(cmd, capture_output=True, check=True)
             installed_apps_hash = str(zlib.adler32(pathlib.Path(result_file.name).read_bytes()))
-            return f"{installed_apps_hash}.{self.lines_hash()}"
+            known_models_hash = str(
+                zlib.adler32(pathlib.Path(known_models_file.name).read_bytes())
+            )
+            return f"{installed_apps_hash}.{known_models_hash}.{self.lines_hash()}"
 
     def report_names_getter(
         self,

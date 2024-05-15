@@ -5,6 +5,8 @@ import os
 import pathlib
 import sys
 
+from extended_mypy_django_plugin.scripts import record_known_models
+
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -14,6 +16,11 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--apps-file",
         help="The file to print the installed apps to, one app per line",
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "--known-models-file",
+        help="The file to print the known models to",
         type=pathlib.Path,
     )
     return parser
@@ -39,6 +46,7 @@ def main(argv: list[str] | None = None) -> None:
     assert settings.configured, "Settings are not configured"
 
     args.apps_file.write_text("\n".join(settings.INSTALLED_APPS))
+    record_known_models(args.known_models_file, apps)
 
 
 if __name__ == "__main__":
