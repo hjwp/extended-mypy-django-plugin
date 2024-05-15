@@ -1,10 +1,12 @@
 import ast
 import dataclasses
 import importlib
+import importlib.resources
 import inspect
 import itertools
 import json
 import pathlib
+import runpy
 import shlex
 import stat
 import subprocess
@@ -90,31 +92,57 @@ class _Store:
             if all(p.isidentifier() for p in k.split(".")):
                 found[k] = v
 
+        for path in lines_file.parent.iterdir():
+            if path.name.startswith("."):
+                continue
+            if path.name.startswith("__"):
+                continue
+            if path.name == "all.lines":
+                continue
+
+            if path.suffix == ".py" and path.name[:-3] not in found:
+                try:
+                    module = runpy.run_path(str(path))
+                except Exception:
+                    path.unlink()
+                else:
+                    # Make sure that we only delete when the module being referenced doesn't exist anymore
+                    # Essentially this covers the scenario where the models are on disk but not in INSTALLED_APPS
+                    mod = module.get("mod")
+                    if not isinstance(mod, str) or not importlib.util.find_spec(module["mod"]):
+                        path.unlink()
+
         return cls(prefix=prefix, modules=modules, lines_file=lines_file).write(modules)
 
-    def _write_mod(self, directory: pathlib.Path, mod: str, summary: str) -> None:
-        name = f"mod_{zlib.adler32(mod.encode())}.py"
-        self.modules_to_report_name[mod] = f"{self.prefix}.{name[:-3]}"
+    def _write_mod(
+        self, directory: pathlib.Path, mod: str, summary: str, empty: bool = False
+    ) -> str:
+        name = f"mod_{zlib.adler32(mod.encode())}"
+        self.modules_to_report_name[mod] = f"{self.prefix}.{name}"
 
         # For mypy to trigger this dependency as stale it's interface must change
         # So we produce a different function each time using the current time
         content = textwrap.dedent(f"""
-        def value_{str(time.time()).replace('.', '__')}() -> str:
+        def value_{'not_installed' if empty else str(time.time()).replace('.', '__')}() -> str:
             return "{summary}"
+
+        mod = "{mod}"
         """)
 
-        destination = self.lines_file.parent / name
+        destination = self.lines_file.parent / f"{name}.py"
         previous_content = None if not destination.exists() else destination.read_text()
         if content != previous_content:
-            (directory / name).write_text(content)
+            (directory / f"{name}.py").write_text(content)
+        return name
 
     def add_mod(self, mod: str) -> str:
         with tempfile.TemporaryDirectory() as tmp:
             temp_dir = pathlib.Path(tmp)
             summary = f"{mod} ||>"
-            self._write_mod(temp_dir, mod, summary)
-            name = f"mod_{zlib.adler32(mod.encode())}"
-            (temp_dir / f"{name}.py").rename(pathlib.Path(self.lines_file.parent) / f"{name}.py")
+            name = self._write_mod(temp_dir, mod, summary, empty=True)
+            made = temp_dir / f"{name}.py"
+            if made.exists():
+                made.rename(pathlib.Path(self.lines_file.parent) / f"{name}.py")
             return f"{self.prefix}.{name}"
 
     def write(self, modules: Mapping[str, str]) -> "_Store":
