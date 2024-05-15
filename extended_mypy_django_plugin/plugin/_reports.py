@@ -405,9 +405,8 @@ class Reports:
             get_model_related_fields=get_model_related_fields,
             get_field_related_model_cls=get_field_related_model_cls,
         ).items():
-            modules[mod] = (
-                f"{mod} |>> {self._store.prefix}.{installed_apps_hash}.{zlib.adler32('||'.join(sorted(deps)).encode())}"
-            )
+            deps_hash = f"deps:{zlib.adler32('||'.join(sorted(deps)).encode())}"
+            modules[mod] = f"{mod} |>> {self._store.prefix}.{installed_apps_hash}.{deps_hash}"
 
         self._store = self._store.write(modules)
         return self._get_report_names
