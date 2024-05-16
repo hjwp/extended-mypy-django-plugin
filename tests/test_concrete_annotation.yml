@@ -63,6 +63,9 @@
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+    # And those changes stick
+    - out: |
+        main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
 
 - case: sees_new_models
   out: ""
@@ -91,4 +94,7 @@
       out: |
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
-        main:6: error: Item "Another" of "Child1 | Child2 | Child3 | ChildOther | Another" has no attribute "two"  [union-attr]
+        main:6: error: Item "Another" of "Child1 | Child2 | Child3 | Another | ChildOther" has no attribute "two"  [union-attr]
+    # And remains
+    - out: |
+        main:6: error: Item "Another" of "Child1 | Child2 | Child3 | Another | ChildOther" has no attribute "two"  [union-attr]

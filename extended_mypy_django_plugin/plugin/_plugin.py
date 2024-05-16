@@ -10,7 +10,6 @@ from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
     AttributeContext,
-    ClassDefContext,
     DynamicClassDefContext,
     FunctionContext,
 )
@@ -48,8 +47,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     It implements the following mypy plugin hooks:
 
     .. automethod:: get_additional_deps
-
-    .. autoattribute:: get_customize_class_mro_hook
 
     .. autoattribute:: get_dynamic_class_hook
 
@@ -90,6 +87,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             lookup_info=self._lookup_info,
             django_context_model_modules=self.django_context.model_modules,
             is_installed_model=self._is_installed_model,
+            known_concrete_models=self.report.known_concrete_models,
         )
 
         self.dependencies = _dependencies.Dependencies(
@@ -139,29 +137,10 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         We use a generated "report" to re-analyze a file if a new dependency
         is discovered after this file has been processed.
         """
-        return self.dependencies.for_file(
+        results = self.dependencies.for_file(
             file.fullname, imports=file.imports, super_deps=super().get_additional_deps(file)
         )
-
-    @_hook.hook
-    class get_customize_class_mro_hook(Hook[ClassDefContext, None]):
-        """
-        For any class that is a model, we want to record an association between
-        abstract and concrete models.
-
-        This hook will find those classes and ensure the ``TypeInfo`` objects
-        for them will have metadata expressing this relationship.
-        """
-
-        def choose(self) -> bool:
-            sym = self.plugin._lookup_info(self.fullname)
-            return self.fullname != _store.MODEL_CLASS_FULLNAME and bool(
-                sym and _store.MODEL_CLASS_FULLNAME in [m.fullname for m in sym.mro]
-            )
-
-        def run(self, ctx: ClassDefContext) -> None:
-            assert isinstance(ctx.api, SemanticAnalyzer)
-            return self.store.associate_model_heirarchy(self.fullname, self.plugin._lookup_info)
+        return results
 
     @_hook.hook
     class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):

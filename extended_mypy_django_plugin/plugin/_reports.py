@@ -43,7 +43,7 @@ class FieldRelatedModelClsGetter(Protocol):
 
 
 class ReportNamesGetter(Protocol):
-    def __call__(self, fullname: str, deps: list[str], /) -> Iterator[str]: ...
+    def __call__(self, fullname: str, deps: set[str], /) -> Iterator[str]: ...
 
 
 @dataclasses.dataclass
@@ -158,7 +158,7 @@ class _DepFinder:
         django_settings_module: str,
         get_model_related_fields: ModelRelatedFieldsGetter,
         get_field_related_model_cls: FieldRelatedModelClsGetter,
-    ) -> Mapping[str, set[str]]:
+    ) -> tuple[Mapping[str, set[str]], Mapping[str, set[str]]]:
         instance = cls(model_modules=model_modules, django_settings_module=django_settings_module)
         found: set[str] = {django_settings_module}
 
@@ -183,7 +183,7 @@ class _DepFinder:
                 .union(instance.related_models.get(mod) or set())
                 .union(instance.all_imports.get(mod) or set())
             )
-        return result
+        return result, instance.model_children
 
     def __init__(self, *, model_modules: ModelModules, django_settings_module: str) -> None:
         self.model_modules = model_modules
@@ -193,6 +193,7 @@ class _DepFinder:
         self.related_models: dict[str, set[str]] = defaultdict(set)
         self.known_models: dict[str, set[str]] = defaultdict(set)
         self.module_objects: dict[str, types.ModuleType] = {}
+        self.model_children: dict[str, set[str]] = defaultdict(set)
 
     def _find_module_objects(self, mod: str, cls: type[models.Model]) -> None:
         if mod in self.module_objects:
@@ -207,7 +208,8 @@ class _DepFinder:
                 self.module_objects[mod] = mod_obj
 
     def _find_models_in_mro(self, mod: str, cls: type[models.Model]) -> None:
-        self.known_models[mod].add(f"{cls.__module__}.{cls.__qualname__}")
+        cls_fullname = f"{cls.__module__}.{cls.__qualname__}"
+        self.known_models[mod].add(cls_fullname)
 
         for mro in cls.mro():
             if mro is cls:
@@ -215,10 +217,14 @@ class _DepFinder:
             if mro is models.Model:
                 break
 
+            mro_fullname = f"{mro.__module__}.{mro.__qualname__}"
+
             if mro.__module__ != mod:
-                self.known_models[mod].add(f"{mro.__module__}.{mro.__qualname__}")
-                if not mro.__module__.startswith("django."):
-                    self.known_models[mro.__module__].add(f"{cls.__module__}.{cls.__qualname__}")
+                self.known_models[mod].add(mro_fullname)
+
+            if not mro.__module__.startswith("django."):
+                self.known_models[mro.__module__].add(cls_fullname)
+                self.model_children[mro_fullname].add(cls_fullname)
 
     def _find_related_models(
         self,
@@ -227,6 +233,8 @@ class _DepFinder:
         get_model_related_fields: ModelRelatedFieldsGetter,
         get_field_related_model_cls: FieldRelatedModelClsGetter,
     ) -> None:
+        cls_fullname = "{cls.__module__}.{cls.__qualname__}"
+
         for field in itertools.chain(
             # forward relations
             get_model_related_fields(cls),
@@ -238,10 +246,13 @@ class _DepFinder:
             except Exception:
                 continue
             related_model_module = related_model_cls.__module__
+            related_model_fullname = (
+                f"{related_model_cls.__module__}.{related_model_cls.__qualname__}"
+            )
             if related_model_module != mod:
-                self.related_models[mod].add(related_model_module)
+                self.related_models[mod].add(related_model_fullname)
                 if not related_model_module.startswith("django."):
-                    self.related_models[related_model_module].add(mod)
+                    self.related_models[related_model_module].add(cls_fullname)
 
     def _find_imports(self) -> None:
         for mod, module in self.module_objects.items():
@@ -314,6 +325,10 @@ class Reports:
         self._store = store
         self._installed_apps_script = installed_apps_script
         self._django_settings_module = django_settings_module
+        self._known_concrete_models: MutableMapping[str, set[str]] = defaultdict(set)
+
+    def known_concrete_models(self, fullname: str) -> set[str]:
+        return self._known_concrete_models[fullname]
 
     def lines_hash(self) -> str:
         buffer = io.BytesIO()
@@ -376,21 +391,23 @@ class Reports:
         get_model_related_fields: ModelRelatedFieldsGetter,
         get_field_related_model_cls: FieldRelatedModelClsGetter,
     ) -> ReportNamesGetter:
-        modules: dict[str, str] = {}
+        summaries: dict[str, str] = {}
         installed_apps_hash = f"installed_apps:{zlib.adler32('||'.join(installed_apps).encode())}"
-        for mod, deps in _DepFinder.find_from(
+        results, model_children = _DepFinder.find_from(
             model_modules,
             django_settings_module=self._django_settings_module,
             get_model_related_fields=get_model_related_fields,
             get_field_related_model_cls=get_field_related_model_cls,
-        ).items():
+        )
+        for mod, deps in results.items():
             deps_hash = f"deps:{zlib.adler32('||'.join(sorted(deps)).encode())}"
-            modules[mod] = f"{mod} |>> {self._store.prefix}.{installed_apps_hash}.{deps_hash}"
+            summaries[mod] = f"{mod} |>> {self._store.prefix}.{installed_apps_hash}.{deps_hash}"
 
-        self._store = self._store.write(modules)
+        self._store = self._store.write(summaries)
+        self._known_concrete_models.update(model_children)
         return self._get_report_names
 
-    def _get_report_names(self, fullname: str, deps: list[str], /) -> Iterator[str]:
+    def _get_report_names(self, fullname: str, deps: set[str], /) -> Iterator[str]:
         report = self._store.modules_to_report_name.get(fullname)
         if report is None:
             if fullname.startswith("django.db."):
@@ -411,5 +428,5 @@ class Reports:
 
         for dep in deps:
             report = self._store.modules_to_report_name.get(dep)
-            if report:
+            if report and report not in deps:
                 yield report

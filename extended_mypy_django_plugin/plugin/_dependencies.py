@@ -47,7 +47,7 @@ class Dependencies:
                             deps.append(new_dep)
                         break
 
-        for report in self._report_names_getter(fullname, [m for _, m, _ in deps]):
+        for report in self._report_names_getter(fullname, {m for _, m, _ in deps}):
             new_dep = (10, report, -1)
 
             if new_dep not in deps:
