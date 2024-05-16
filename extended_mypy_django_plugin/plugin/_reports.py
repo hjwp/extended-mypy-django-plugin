@@ -333,10 +333,12 @@ class Reports:
     def lines_hash(self) -> str:
         buffer = io.BytesIO()
         for path in self._store.reports_dir.iterdir():
-            buffer.write(b"\n")
-            buffer.write(path.name.encode())
-            buffer.write(b"\n")
-            buffer.write(path.read_bytes())
+            content = path.read_bytes()
+            if b"def value_not_installed" not in content:
+                buffer.write(b"\n")
+                buffer.write(path.name.encode())
+                buffer.write(b"\n")
+                buffer.write(path.read_bytes())
 
         return str(zlib.adler32(buffer.getbuffer()))
 
