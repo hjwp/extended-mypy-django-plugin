@@ -3,10 +3,10 @@ import dataclasses
 import importlib
 import importlib.resources
 import inspect
+import io
 import itertools
-import json
 import pathlib
-import runpy
+import re
 import shlex
 import stat
 import subprocess
@@ -26,6 +26,12 @@ from django.db.models.fields.related import ForeignObjectRel, RelatedField
 ModelModules = Mapping[str, Mapping[str, type[models.Model]]]
 
 
+regexes = {
+    "mod_decl": re.compile(r'^mod = "(?P<mod>[^"]+)"$'),
+    "summary_decl": re.compile(r'^summary = "(?P<summary>[^"]+)"$'),
+}
+
+
 class ModelRelatedFieldsGetter(Protocol):
     def __call__(self, model_cls: type[models.Model]) -> Iterator["RelatedField[Any, Any]"]: ...
 
@@ -43,7 +49,7 @@ class ReportNamesGetter(Protocol):
 @dataclasses.dataclass
 class _Store:
     prefix: str
-    lines_file: pathlib.Path
+    reports_dir: pathlib.Path
 
     modules: Mapping[str, str] = dataclasses.field(default_factory=dict)
     modules_to_report_name: MutableMapping[str, str] = dataclasses.field(default_factory=dict)
@@ -51,68 +57,34 @@ class _Store:
     version: ClassVar[str] = "json.1"
 
     @classmethod
-    def _read_modules(cls, prefix: str, lines_file: pathlib.Path) -> Mapping[str, str]:
-        if not lines_file.exists():
-            return {}
+    def read(cls, prefix: str, reports_dir: pathlib.Path) -> "_Store":
+        modules: dict[str, str] = {}
+        if not reports_dir.exists():
+            reports_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            with open(lines_file) as fle:
-                found = json.load(fle)
-        except (ValueError, TypeError, OSError):
-            lines_file.unlink()
-            return {}
-        else:
-            version: str | None = None
-            if isinstance(found, dict) and isinstance(found.get("version"), str):
-                version = found["version"]
+        for path in reports_dir.iterdir():
+            mod: str | None = None
+            summary: str | None = None
 
-            if version != cls.version:
-                lines_file.unlink(missing_ok=True)
-                return {}
+            if path.suffix == ".py":
+                for line in path.read_text().splitlines():
+                    m = regexes["mod_decl"].match(line)
+                    if m:
+                        mod = m.groupdict()["mod"]
 
-            if found.get("prefix") != prefix:
-                lines_file.unlink(missing_ok=True)
-                return {}
+                    m = regexes["summary_decl"].match(line)
+                    if m:
+                        summary = m.groupdict()["summary"]
 
-            if not isinstance(modules := found.get("modules"), dict) or any(
-                not isinstance(k, str) or not isinstance(v, str) for k, v in modules.items()
-            ):
-                lines_file.unlink(missing_ok=True)
-                return {}
-
-            return modules
-
-    @classmethod
-    def read(cls, prefix: str, lines_file: pathlib.Path) -> "_Store":
-        found: MutableMapping[str, str] = {}
-
-        modules = cls._read_modules(prefix, lines_file)
-
-        for k, v in modules.items():
-            if all(p.isidentifier() for p in k.split(".")):
-                found[k] = v
-
-        for path in lines_file.parent.iterdir():
-            if path.name.startswith("."):
-                continue
-            if path.name.startswith("__"):
-                continue
-            if path.name == "all.lines":
-                continue
-
-            if path.suffix == ".py" and path.name[:-3] not in found:
-                try:
-                    module = runpy.run_path(str(path))
-                except Exception:
+            if mod is None or summary is None:
+                path.unlink()
+            else:
+                if not importlib.util.find_spec(mod):
                     path.unlink()
                 else:
-                    # Make sure that we only delete when the module being referenced doesn't exist anymore
-                    # Essentially this covers the scenario where the models are on disk but not in INSTALLED_APPS
-                    mod = module.get("mod")
-                    if not isinstance(mod, str) or not importlib.util.find_spec(module["mod"]):
-                        path.unlink()
+                    modules[mod] = summary
 
-        return cls(prefix=prefix, modules=modules, lines_file=lines_file).write(modules)
+        return cls(prefix=prefix, modules=modules, reports_dir=reports_dir).write(modules)
 
     def _write_mod(
         self, directory: pathlib.Path, mod: str, summary: str, empty: bool = False
@@ -124,14 +96,22 @@ class _Store:
         # So we produce a different function each time using the current time
         content = textwrap.dedent(f"""
         def value_{'not_installed' if empty else str(time.time()).replace('.', '__')}() -> str:
-            return "{summary}"
+            return ""
 
         mod = "{mod}"
+        summary = "{summary}"
         """)
 
-        destination = self.lines_file.parent / f"{name}.py"
-        previous_content = None if not destination.exists() else destination.read_text()
-        if content != previous_content:
+        destination = self.reports_dir / f"{name}.py"
+        previous_summary: str | None = None
+        if destination.exists():
+            for line in destination.read_text().splitlines():
+                m = regexes["summary_decl"].match(line)
+                if m:
+                    previous_summary = m.groupdict()["summary"]
+                    break
+
+        if summary != previous_summary:
             (directory / f"{name}.py").write_text(content)
         return name
 
@@ -142,14 +122,14 @@ class _Store:
             name = self._write_mod(temp_dir, mod, summary, empty=True)
             made = temp_dir / f"{name}.py"
             if made.exists():
-                made.rename(pathlib.Path(self.lines_file.parent) / f"{name}.py")
+                made.rename(self.reports_dir / f"{name}.py")
             return f"{self.prefix}.{name}"
 
     def write(self, modules: Mapping[str, str]) -> "_Store":
         instance = self.__class__(
             prefix=self.prefix,
             modules=modules,
-            lines_file=self.lines_file,
+            reports_dir=self.reports_dir,
             modules_to_report_name=self.modules_to_report_name,
         )
 
@@ -157,19 +137,11 @@ class _Store:
         # We also don't simply rename the entire directory so unchanged files remain unchanged
         with tempfile.TemporaryDirectory() as tmp:
             temp_dir = pathlib.Path(tmp)
-            data = {
-                "version": instance.version,
-                "prefix": instance.prefix,
-                "modules": instance.modules,
-            }
-            with open(temp_dir / instance.lines_file.name, "w") as fle:
-                json.dump(data, fle, indent="  ", sort_keys=True)
-
             for mod, summary in instance.modules.items():
                 instance._write_mod(temp_dir, mod, summary)
 
             for path in temp_dir.iterdir():
-                destination = instance.lines_file.parent / path.name
+                destination = instance.reports_dir / path.name
                 if not destination.exists():
                     path.rename(destination)
                 elif path.read_bytes() != destination.read_bytes():
@@ -327,7 +299,7 @@ class Reports:
         reports_dir.mkdir(parents=True, exist_ok=True)
 
         return cls(
-            store=_Store.read(prefix=reports_dir_prefix, lines_file=reports_dir / "all.lines"),
+            store=_Store.read(prefix=reports_dir_prefix, reports_dir=reports_dir),
             installed_apps_script=installed_apps_script,
             django_settings_module=django_settings_module,
         )
@@ -344,7 +316,14 @@ class Reports:
         self._django_settings_module = django_settings_module
 
     def lines_hash(self) -> str:
-        return str(zlib.adler32(self._store.lines_file.read_bytes()))
+        buffer = io.BytesIO()
+        for path in self._store.reports_dir.iterdir():
+            buffer.write(b"\n")
+            buffer.write(path.name.encode())
+            buffer.write(b"\n")
+            buffer.write(path.read_bytes())
+
+        return str(zlib.adler32(buffer.getbuffer()))
 
     def determine_version_hash(self) -> str:
         result_file_cm = tempfile.NamedTemporaryFile()
