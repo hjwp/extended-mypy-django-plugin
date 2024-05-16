@@ -37,7 +37,7 @@ class FieldRelatedModelClsGetter(Protocol):
 
 
 class ReportNamesGetter(Protocol):
-    def __call__(self, fullname: str, /) -> Iterator[str]: ...
+    def __call__(self, fullname: str, deps: list[str], /) -> Iterator[str]: ...
 
 
 @dataclasses.dataclass
@@ -411,7 +411,7 @@ class Reports:
         self._store = self._store.write(modules)
         return self._get_report_names
 
-    def _get_report_names(self, fullname: str, /) -> Iterator[str]:
+    def _get_report_names(self, fullname: str, deps: list[str], /) -> Iterator[str]:
         report = self._store.modules_to_report_name.get(fullname)
         if report is None:
             if fullname.startswith("django.db."):
@@ -429,3 +429,8 @@ class Reports:
         if report or fullname.startswith(f"{self._store.prefix}."):
             yield self._store.modules_to_report_name[self._django_settings_module]
             yield self._django_settings_module
+
+        for dep in deps:
+            report = self._store.modules_to_report_name.get(dep)
+            if report:
+                yield report

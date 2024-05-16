@@ -27,12 +27,6 @@ class Dependencies:
         if fullname.startswith("django."):
             return deps
 
-        for report in self._report_names_getter(fullname):
-            new_dep = (10, report, -1)
-
-            if new_dep not in deps:
-                deps.append(new_dep)
-
         for imp in imports:
             found: set[str] = set()
             if isinstance(imp, ImportFrom):
@@ -52,5 +46,11 @@ class Dependencies:
                         if new_dep not in deps:
                             deps.append(new_dep)
                         break
+
+        for report in self._report_names_getter(fullname, [m for _, m, _ in deps]):
+            new_dep = (10, report, -1)
+
+            if new_dep not in deps:
+                deps.append(new_dep)
 
         return deps

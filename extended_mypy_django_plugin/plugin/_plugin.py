@@ -119,7 +119,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         This lets us tell dmypy to restart itself as necessary.
         """
         if not self.running_in_daemon:
-            self._last_version_hash = f"1.{self.report.lines_hash()}"
+            self._last_version_hash = "1"
         else:
             version_hash = self.report.determine_version_hash()
             if not hasattr(self, "_last_version_hash"):
