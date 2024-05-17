@@ -1,8 +1,6 @@
-import ast
 import dataclasses
 import importlib
 import importlib.resources
-import inspect
 import io
 import itertools
 import pathlib
@@ -14,7 +12,6 @@ import sys
 import tempfile
 import textwrap
 import time
-import types
 import zlib
 from collections import defaultdict
 from collections.abc import Iterator, Mapping, MutableMapping
@@ -165,7 +162,6 @@ class _DepFinder:
         for mod, known in model_modules.items():
             found.add(mod)
             for name, model_cls in known.items():
-                instance._find_module_objects(mod, model_cls)
                 instance._find_models_in_mro(mod, model_cls)
                 instance._find_related_models(
                     mod,
@@ -173,7 +169,6 @@ class _DepFinder:
                     get_model_related_fields,
                     get_field_related_model_cls=get_field_related_model_cls,
                 )
-                instance._find_imports()
 
         result: dict[str, set[str]] = {}
         for mod in found:
@@ -181,7 +176,6 @@ class _DepFinder:
                 set()
                 .union(instance.known_models.get(mod) or set())
                 .union(instance.related_models.get(mod) or set())
-                .union(instance.all_imports.get(mod) or set())
             )
         return result, instance.model_children
 
@@ -189,23 +183,9 @@ class _DepFinder:
         self.model_modules = model_modules
         self.django_settings_modules = django_settings_module
 
-        self.all_imports: dict[str, set[str]] = {}
         self.related_models: dict[str, set[str]] = defaultdict(set)
         self.known_models: dict[str, set[str]] = defaultdict(set)
-        self.module_objects: dict[str, types.ModuleType] = {}
         self.model_children: dict[str, set[str]] = defaultdict(set)
-
-    def _find_module_objects(self, mod: str, cls: type[models.Model]) -> None:
-        if mod in self.module_objects:
-            return
-
-        try:
-            mod_obj = inspect.getmodule(cls)
-        except:
-            pass
-        else:
-            if mod_obj and mod_obj.__name__ == mod:
-                self.module_objects[mod] = mod_obj
 
     def _find_models_in_mro(self, mod: str, cls: type[models.Model]) -> None:
         cls_fullname = f"{cls.__module__}.{cls.__qualname__}"
@@ -245,6 +225,10 @@ class _DepFinder:
                 related_model_cls = get_field_related_model_cls(field)
             except Exception:
                 continue
+
+            else:
+                if related_model_cls is None:
+                    continue
             related_model_module = related_model_cls.__module__
             related_model_fullname = (
                 f"{related_model_cls.__module__}.{related_model_cls.__qualname__}"
@@ -253,27 +237,6 @@ class _DepFinder:
                 self.related_models[mod].add(related_model_fullname)
                 if not related_model_module.startswith("django."):
                     self.related_models[related_model_module].add(cls_fullname)
-
-    def _find_imports(self) -> None:
-        for mod, module in self.module_objects.items():
-            imports: set[str] = set()
-            try:
-                content = ast.parse(inspect.getsource(module))
-            except:
-                pass
-            else:
-                for node in ast.walk(content):
-                    if isinstance(node, ast.Import):
-                        for alias in node.names:
-                            imports.add(alias.name)
-                    elif isinstance(node, ast.ImportFrom):
-                        for alias in node.names:
-                            module_name = node.module
-                            if module_name is None:
-                                module_name = ".".join(mod.split(".")[:-1])
-                            imports.add(module_name)
-                            imports.add(f"{module_name}.{alias.name}")
-            self.all_imports[mod] = imports
 
 
 class Reports:
