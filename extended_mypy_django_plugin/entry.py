@@ -29,7 +29,7 @@ class PluginProvider:
 
     def __call__(self, version: str) -> type[MypyPlugin]:
         if self.instance is not None:
-            self.locals["__version__"] = self.instance.determine_plugin_version()
+            self.locals["__version__"] = str(self.instance.determine_plugin_version())
 
             # Inside dmypy, don't create a new plugin
             return MypyPlugin
@@ -43,6 +43,6 @@ class PluginProvider:
                 mypy_version_tuple=(int(major), int(minor)),  # type: ignore[call-arg]
             )
             provider.instance = instance
-            provider.locals["__version__"] = instance.determine_plugin_version()
+            provider.locals["__version__"] = str(instance.determine_plugin_version())
 
         return type("Plugin", (provider.plugin_cls,), {"__init__": __init__})

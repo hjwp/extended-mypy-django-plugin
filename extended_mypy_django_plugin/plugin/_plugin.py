@@ -1,6 +1,5 @@
 import enum
 import sys
-import zlib
 from typing import Generic
 
 from mypy.checker import TypeChecker
@@ -57,8 +56,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     .. autoattribute:: get_attribute_hook
     """
 
-    _last_version_hash: str
-
     class Annotations(enum.Enum):
         CONCRETE = "extended_mypy_django_plugin.annotations.Concrete"
         CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
@@ -110,24 +107,16 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         else:
             return None
 
-    def determine_plugin_version(self) -> str:
+    def determine_plugin_version(self) -> int:
         """
         Used to set `__version__' where the plugin is defined.
 
         This lets us tell dmypy to restart itself as necessary.
         """
         if not self.running_in_daemon:
-            self._last_version_hash = "1"
+            return 0
         else:
-            version_hash = self.report.determine_version_hash()
-            if not hasattr(self, "_last_version_hash"):
-                self._last_version_hash = version_hash
-            else:
-                if version_hash != self._last_version_hash:
-                    hsh = zlib.adler32("\n".join(version_hash).encode())
-                    self._last_version_hash = f"1.{hsh}"
-
-        return self._last_version_hash
+            return self.report.determine_version_hash()
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
         """

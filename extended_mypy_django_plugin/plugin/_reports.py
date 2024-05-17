@@ -310,7 +310,7 @@ class Reports:
 
         return str(zlib.adler32(buffer.getbuffer()))
 
-    def determine_version_hash(self) -> str:
+    def determine_version_hash(self) -> int:
         result_file_cm = tempfile.NamedTemporaryFile()
         known_models_file_cm = tempfile.NamedTemporaryFile()
         with result_file_cm as result_file, known_models_file_cm as known_models_file:
@@ -352,7 +352,9 @@ class Reports:
             known_models_hash = str(
                 zlib.adler32(pathlib.Path(known_models_file.name).read_bytes())
             )
-            return f"{installed_apps_hash}.{known_models_hash}.{self.lines_hash()}"
+            return zlib.adler32(
+                f"{installed_apps_hash}.{known_models_hash}.{self.lines_hash()}".encode()
+            )
 
     def report_names_getter(
         self,
