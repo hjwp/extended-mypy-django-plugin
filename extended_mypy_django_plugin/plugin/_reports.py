@@ -76,10 +76,15 @@ class _Store:
             if mod is None or summary is None:
                 path.unlink()
             else:
-                if not importlib.util.find_spec(mod):
-                    path.unlink()
-                else:
+                try:
+                    spec = importlib.util.find_spec(mod)
+                except ModuleNotFoundError:
+                    spec = None
+
+                if spec:
                     modules[mod] = summary
+                else:
+                    path.unlink()
 
         return cls(prefix=prefix, modules=modules, reports_dir=reports_dir).write(modules)
 
