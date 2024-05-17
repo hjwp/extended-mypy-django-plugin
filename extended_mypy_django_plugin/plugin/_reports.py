@@ -1,6 +1,6 @@
 import dataclasses
-import importlib
 import importlib.resources
+import importlib.util
 import io
 import itertools
 import pathlib
