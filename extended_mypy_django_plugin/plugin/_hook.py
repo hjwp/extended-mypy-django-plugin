@@ -143,6 +143,7 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
+        self.owner = owner
 
     @overload
     def __get__(self, instance: None, owner: None) -> hook[T_Plugin, T_Ctx, T_Ret]: ...
@@ -156,13 +157,13 @@ class hook(Generic[T_Plugin, T_Ctx, T_Ret]):
         if instance is None:
             return self
 
-        super_hook = getattr(super(owner, instance), self.name)
+        super_hook = getattr(super(self.owner, instance), self.name)
 
-        def hook(fullname: str) -> Callable[[T_Ctx], T_Ret] | None:
+        def result(fullname: str) -> Callable[[T_Ctx], T_Ret] | None:
             return self.hook(
                 plugin=instance,
                 fullname=fullname,
                 super_hook=super_hook(fullname),
             ).hook()
 
-        return hook
+        return result
