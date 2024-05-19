@@ -7,6 +7,11 @@ DepList = list[tuple[int, str, int]]
 
 
 class Dependencies:
+    """
+    This object is used to determine if a model is known, and also what
+    dependencies to return for a file for the get_additional_deps hook
+    """
+
     def __init__(
         self, model_modules: ModelModules, report_names_getter: ReportNamesGetter
     ) -> None:

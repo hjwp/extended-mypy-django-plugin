@@ -1,0 +1,47 @@
+on:
+  - workflow_dispatch
+
+name: Release Packages
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Create the package
+    runs-on: ubuntu-latest
+    environment: github_release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - id: build
+        run: pip install hatch==1.7.0 && hatch build
+
+      - id: version
+        run: |
+          version=$(python -c "import runpy; print(runpy.run_path('extended_mypy_django_plugin/version.py')['VERSION'])")
+          versiondash=$(python -c "import runpy; print(runpy.run_path('extended_mypy_django_plugin/version.py')['VERSION'].replace('.', '-'))")
+
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "versiondash=$versiondash" >> $GITHUB_OUTPUT
+
+      - id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: extended_mypy_django_plugin ${{ steps.version.outputs.version }}
+          body: "https://extended-mypy-django-plugin.readthedocs.io/en/latest/api/changelog.html#release-${{ steps.version.outputs.versiondash }}"
+          tag_name: "release-${{ steps.version.outputs.version }}"
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+          files: "dist/*"
+
+      - uses: pypa/gh-action-pypi-publish@v1.4.1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN_CORE }}
+          packages_dir: dist

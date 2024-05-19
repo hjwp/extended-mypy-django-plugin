@@ -245,6 +245,13 @@ class _DepFinder:
 
 
 class Reports:
+    """
+    This class is responsible for generating the files that represent our virtual
+    dependencies.
+
+    Further documentation has yet to be added.
+    """
+
     @classmethod
     def create(
         cls,

@@ -8,6 +8,7 @@ Enabling this plugin in a project is adding either to ``mypy.ini``::
     [mypy]
     plugins =
         extended_mypy_django_plugin.main
+    mypy_path = $MYPY_CONFIG_FILE_DIR/./path/relative/to/config/where/information/is/cached
 
     [mypy.plugins.django-stubs]
     scratch_path = ./path/relative/to/config/where/information/is/cached
@@ -17,6 +18,7 @@ Or to ``pyproject.toml``::
 
     [tool.mypy]
     plugins = ["extended_mypy_django_plugin.main"]
+    mypy_path = "$MYPY_CONFIG_FILE_DIR/./path/relative/to/config/where/information/is/cached"
 
     [tool.django-stubs]
     scratch_path = "./path/relative/to/config/where/information/is/cached"

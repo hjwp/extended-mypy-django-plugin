@@ -38,11 +38,5 @@ old version is purely a transitional clutch.
 Status
 ------
 
-This mostly works and is in a reasonable tidy state, but there needs to be a lot
-more tests created and more work done on ensuring that the ``mypy`` daemon can
-still produce the correct results as code changes.
-
-The current tasks to do next include:
-
-* Actual test coverage
-* Add more functionality and ensure the code works at scale
+This mostly works and is in a reasonable tidy state, but some more work needs
+to be done improve the test coverage and general tidiness oft he code.
