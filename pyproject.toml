@@ -15,7 +15,6 @@ authors = [
 [project.optional-dependencies]
 tests = [
     "pytest==8.1.1",
-    "pytest-mypy-plugins @ git+https://github.com/delfick/pytest-mypy-plugins@scenarios/followups"
 ]
 stubs-latest = [
     "mypy==1.10.0",
