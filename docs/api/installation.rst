@@ -1,7 +1,9 @@
 Installation
 ============
 
-.. note:: This plugin hasn't been published on pypi at this point
+Install from pypi::
+
+    python -m pip install extended-mypy-django-plugin
 
 Enabling this plugin in a project is adding either to ``mypy.ini``::
 
