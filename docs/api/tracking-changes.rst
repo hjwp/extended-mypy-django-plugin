@@ -18,3 +18,17 @@ settings.
 To make that easy, the plugin will create reports that are written to a folder
 that is specified by the ``scratch_path`` setting and use those paths to ensure that
 there is a dependency that is changed when new dependencies are discovered.
+
+There is also a script that can be provided to determine information about the project
+used to work out if dmypy should restart itself. This is a necessary action in cases
+where Django needs to be restarted. Doing that restart requires a fresh process that
+hasn't been "poisoned" by having an already imported Django environment.
+
+The plugin comes with a script that already does the correct thing for usual Django
+projects.
+
+If there is a file in the scratch path named ``__assume_django_state_unchanged__`` in
+the ``scratch_path`` then dmypy will not restart itself regardless of whether there are
+changes that require this to happen. This is for projects where starting Django is a
+costly process and a developer may want to have more fidelity over when that startup cost
+is incurred.

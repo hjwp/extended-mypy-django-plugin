@@ -23,12 +23,20 @@ def make_parser() -> argparse.ArgumentParser:
         help="The file to print the known models to",
         type=pathlib.Path,
     )
+    parser.add_argument(
+        "--scratch-path",
+        help="The folder that the plugin is allowed to write in",
+        type=pathlib.Path,
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = make_parser()
     args = parser.parse_args(argv)
+
+    if (args.scratch_path / "__assume_django_state_unchanged__").exists():
+        sys.exit(2)
 
     os.environ["DJANGO_SETTINGS_MODULE"] = args.django_settings_module
 

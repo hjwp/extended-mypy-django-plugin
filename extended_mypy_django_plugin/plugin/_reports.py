@@ -317,7 +317,9 @@ class Reports:
 
         return str(zlib.adler32(buffer.getbuffer()))
 
-    def determine_version_hash(self, previous_version: int | None) -> int:
+    def determine_version_hash(
+        self, scratch_path: pathlib.Path, previous_version: int | None
+    ) -> int:
         result_file_cm = tempfile.NamedTemporaryFile()
         known_models_file_cm = tempfile.NamedTemporaryFile()
         with result_file_cm as result_file, known_models_file_cm as known_models_file:
@@ -351,6 +353,8 @@ class Reports:
                     result_file.name,
                     "--known-models-file",
                     known_models_file.name,
+                    "--scratch-path",
+                    str(scratch_path),
                 ]
             )
 

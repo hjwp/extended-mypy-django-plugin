@@ -56,6 +56,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     .. autoattribute:: get_attribute_hook
     """
 
+    plugin_config: _config.Config
+
     class Annotations(enum.Enum):
         CONCRETE = "extended_mypy_django_plugin.annotations.Concrete"
         CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
@@ -116,7 +118,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if not self.running_in_daemon:
             return 0
         else:
-            return self.report.determine_version_hash(previous_version)
+            return self.report.determine_version_hash(
+                self.plugin_config.scratch_path, previous_version
+            )
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
         """
