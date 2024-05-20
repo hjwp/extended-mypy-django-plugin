@@ -9,6 +9,7 @@ Changelog
     * Providing a return code of 2 from the installed_apps script will make dmypy not
       change version to cause a restart.
     * Changed the ``get_installed_apps`` setting to be ``determine_django_state``
+    * Changed the name in pyproject.toml to use dashes instead of underscores
 
 .. _release-0.5.0:
 
