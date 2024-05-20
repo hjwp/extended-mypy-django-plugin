@@ -75,7 +75,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
         self.running_in_daemon: bool = "dmypy" in sys.argv[0]
         self.report = _reports.Reports.create(
-            installed_apps_script=self.plugin_config.installed_apps_script,
+            determine_django_state_script=self.plugin_config.determine_django_state_script,
             django_settings_module=self.plugin_config.django_settings_module,
             scratch_path=self.plugin_config.scratch_path,
         )
