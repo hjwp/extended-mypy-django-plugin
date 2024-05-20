@@ -5,7 +5,7 @@ Changelog
 
 .. _release-0.5.1:
 
-0.5.1 - TBD
+0.5.1 - 21 May 2024
     * Providing a return code of 2 from the installed_apps script will make dmypy not
       change version to cause a restart.
     * Changed the ``get_installed_apps`` setting to be ``determine_django_state``
