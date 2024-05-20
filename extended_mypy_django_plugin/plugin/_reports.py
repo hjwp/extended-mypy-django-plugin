@@ -317,7 +317,7 @@ class Reports:
 
         return str(zlib.adler32(buffer.getbuffer()))
 
-    def determine_version_hash(self) -> int:
+    def determine_version_hash(self, previous_version: int | None) -> int:
         result_file_cm = tempfile.NamedTemporaryFile()
         known_models_file_cm = tempfile.NamedTemporaryFile()
         with result_file_cm as result_file, known_models_file_cm as known_models_file:
@@ -354,7 +354,14 @@ class Reports:
                 ]
             )
 
-            subprocess.run(cmd, capture_output=True, check=True)
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+            except subprocess.CalledProcessError as err:
+                if err.returncode == 2:
+                    return 1 if previous_version is None else previous_version
+                else:
+                    raise
+
             installed_apps_hash = str(zlib.adler32(pathlib.Path(result_file.name).read_bytes()))
             known_models_hash = str(
                 zlib.adler32(pathlib.Path(known_models_file.name).read_bytes())

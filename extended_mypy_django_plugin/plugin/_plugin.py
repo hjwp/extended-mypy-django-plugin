@@ -107,7 +107,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         else:
             return None
 
-    def determine_plugin_version(self) -> int:
+    def determine_plugin_version(self, previous_version: int | None = None) -> int:
         """
         Used to set `__version__' where the plugin is defined.
 
@@ -116,7 +116,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if not self.running_in_daemon:
             return 0
         else:
-            return self.report.determine_version_hash()
+            return self.report.determine_version_hash(previous_version)
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
         """
