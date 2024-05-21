@@ -26,10 +26,16 @@ class PluginProvider:
         self.locals = locals
         self.instance: ExtendedMypyStubs | None = None
         self.plugin_cls = plugin_cls
+        self.previous_version: int | None = None
+
+    def _change_version(self, instance: ExtendedMypyStubs) -> None:
+        new_version = instance.determine_plugin_version(self.previous_version)
+        self.previous_version = new_version
+        self.locals["__version__"] = str(new_version)
 
     def __call__(self, version: str) -> type[MypyPlugin]:
         if self.instance is not None:
-            self.locals["__version__"] = str(self.instance.determine_plugin_version())
+            self._change_version(self.instance)
 
             # Inside dmypy, don't create a new plugin
             return MypyPlugin
@@ -43,6 +49,6 @@ class PluginProvider:
                 mypy_version_tuple=(int(major), int(minor)),  # type: ignore[call-arg]
             )
             provider.instance = instance
-            provider.locals["__version__"] = str(instance.determine_plugin_version())
+            provider._change_version(instance)
 
         return type("Plugin", (provider.plugin_cls,), {"__init__": __init__})

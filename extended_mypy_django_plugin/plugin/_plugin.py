@@ -56,6 +56,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     .. autoattribute:: get_attribute_hook
     """
 
+    plugin_config: _config.Config
+
     class Annotations(enum.Enum):
         CONCRETE = "extended_mypy_django_plugin.annotations.Concrete"
         CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
@@ -73,7 +75,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
         self.running_in_daemon: bool = "dmypy" in sys.argv[0]
         self.report = _reports.Reports.create(
-            installed_apps_script=self.plugin_config.installed_apps_script,
+            determine_django_state_script=self.plugin_config.determine_django_state_script,
             django_settings_module=self.plugin_config.django_settings_module,
             scratch_path=self.plugin_config.scratch_path,
         )
@@ -107,7 +109,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         else:
             return None
 
-    def determine_plugin_version(self) -> int:
+    def determine_plugin_version(self, previous_version: int | None = None) -> int:
         """
         Used to set `__version__' where the plugin is defined.
 
@@ -116,7 +118,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         if not self.running_in_daemon:
             return 0
         else:
-            return self.report.determine_version_hash()
+            return self.report.determine_version_hash(
+                self.plugin_config.scratch_path, previous_version
+            )
 
     def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
         """

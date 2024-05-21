@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "extended_mypy_django_plugin"
+name = "extended-mypy-django-plugin"
 dynamic = ["version"]
 description = "Trying to make mypy understand .objects on abstract django models"
 readme = "README.rst"

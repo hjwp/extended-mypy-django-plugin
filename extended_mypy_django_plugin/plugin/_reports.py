@@ -256,26 +256,26 @@ class Reports:
     def create(
         cls,
         *,
-        installed_apps_script: pathlib.Path | None,
+        determine_django_state_script: pathlib.Path | None,
         django_settings_module: str,
         scratch_path: pathlib.Path,
         reports_dir_prefix: str = "__virtual_extended_mypy_django_plugin_report__",
     ) -> "Reports":
-        if installed_apps_script is not None:
-            if not installed_apps_script.exists():
+        if determine_django_state_script is not None:
+            if not determine_django_state_script.exists():
                 raise ValueError("The provided script for finding installed apps does not exist")
 
-            if not installed_apps_script.stat().st_mode & stat.S_IXUSR:
+            if not determine_django_state_script.stat().st_mode & stat.S_IXUSR:
                 raise ValueError(
                     "The provided script for finding installed apps is not executable!"
                 )
 
-        if installed_apps_script is None:
-            installed_apps_script = pathlib.Path(
+        if determine_django_state_script is None:
+            determine_django_state_script = pathlib.Path(
                 str(
                     importlib.resources.files("extended_mypy_django_plugin")
                     / "scripts"
-                    / "get_installed_apps.py"
+                    / "determine_django_state.py"
                 )
             )
 
@@ -286,7 +286,7 @@ class Reports:
 
         return cls(
             store=_Store.read(prefix=reports_dir_prefix, reports_dir=reports_dir),
-            installed_apps_script=installed_apps_script,
+            determine_django_state_script=determine_django_state_script,
             django_settings_module=django_settings_module,
         )
 
@@ -294,11 +294,11 @@ class Reports:
         self,
         *,
         store: _Store,
-        installed_apps_script: pathlib.Path,
+        determine_django_state_script: pathlib.Path,
         django_settings_module: str,
     ) -> None:
         self._store = store
-        self._installed_apps_script = installed_apps_script
+        self._determine_django_state_script = determine_django_state_script
         self._django_settings_module = django_settings_module
         self._known_concrete_models: MutableMapping[str, set[str]] = defaultdict(set)
 
@@ -317,18 +317,20 @@ class Reports:
 
         return str(zlib.adler32(buffer.getbuffer()))
 
-    def determine_version_hash(self) -> int:
+    def determine_version_hash(
+        self, scratch_path: pathlib.Path, previous_version: int | None
+    ) -> int:
         result_file_cm = tempfile.NamedTemporaryFile()
         known_models_file_cm = tempfile.NamedTemporaryFile()
         with result_file_cm as result_file, known_models_file_cm as known_models_file:
-            if self._installed_apps_script is not None:
-                script = self._installed_apps_script
+            if self._determine_django_state_script is not None:
+                script = self._determine_django_state_script
             else:
                 script = pathlib.Path(
                     str(
                         importlib.resources.files("extended_mypy_django_plugin")
                         / "scripts"
-                        / "get_installed_apps.py"
+                        / "determine_django_state.py"
                     )
                 )
 
@@ -351,10 +353,19 @@ class Reports:
                     result_file.name,
                     "--known-models-file",
                     known_models_file.name,
+                    "--scratch-path",
+                    str(scratch_path),
                 ]
             )
 
-            subprocess.run(cmd, capture_output=True, check=True)
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+            except subprocess.CalledProcessError as err:
+                if err.returncode == 2:
+                    return 1 if previous_version is None else previous_version
+                else:
+                    raise
+
             installed_apps_hash = str(zlib.adler32(pathlib.Path(result_file.name).read_bytes()))
             known_models_hash = str(
                 zlib.adler32(pathlib.Path(known_models_file.name).read_bytes())
