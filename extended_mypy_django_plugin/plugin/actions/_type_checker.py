@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from typing import Protocol
 
 from mypy.checker import TypeChecker
@@ -39,15 +38,14 @@ class TypeChecking:
         self,
         ctx: FunctionContext,
         *,
-        super_hook: Callable[[FunctionContext], MypyType] | None,
         desired_annotation_fullname: str,
-    ) -> MypyType:
+    ) -> MypyType | None:
         if not isinstance(ctx.default_return_type, UnboundType):
-            return ctx.default_return_type
+            return None
 
         context = ctx.context
         if not isinstance(context, CallExpr):
-            return ctx.default_return_type
+            return None
 
         if hasattr(self.api, "get_expression_type"):
             # In later mypy versions
@@ -58,15 +56,14 @@ class TypeChecking:
         func = get_proper_type(func)
 
         if not isinstance(func, CallableType):
-            self.api.fail("Expected to be operating on a callable", context)
-            return AnyType(TypeOfAny.from_error)
+            return None
 
         if not isinstance(func.ret_type, UnboundType):
-            return ctx.default_return_type
+            return None
 
         as_generic_type = self.api.named_generic_type(func.ret_type.name, [func.ret_type.args[0]])
         if as_generic_type.type.fullname != desired_annotation_fullname:
-            return ctx.default_return_type
+            return None
 
         if len(func.ret_type.args) != 1:
             self.api.fail("DefaultQuerySet takes only one argument", context)
