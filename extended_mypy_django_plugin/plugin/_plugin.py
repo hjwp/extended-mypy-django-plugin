@@ -204,8 +204,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
         """
-        Find functions that return a ``DefaultQuerySet`` annotation and resolve
-        the annotation.
+        Find functions that return a ``DefaultQuerySet`` annotation with a type variable
+        and resolve the annotation.
         """
 
         def choose(self) -> bool:
@@ -224,11 +224,18 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
-            return type_checking.modify_default_queryset_return_type(
+            result = type_checking.modify_default_queryset_return_type(
                 ctx,
-                super_hook=self.super_hook,
                 desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
             )
+
+            if result is not None:
+                return result
+
+            if self.super_hook is not None:
+                return self.super_hook(ctx)
+
+            return ctx.default_return_type
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
