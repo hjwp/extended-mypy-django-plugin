@@ -5,7 +5,7 @@ Changelog
 
 .. _release-0.5.2:
 
-0.5.2 - TBD
+0.5.2 - 22 May 2024
     * Add more confidence get_function_hook doesn't steal from django-stubs
 
 .. _release-0.5.1:
