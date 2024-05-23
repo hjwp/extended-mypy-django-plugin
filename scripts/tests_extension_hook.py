@@ -149,6 +149,9 @@ class Hooks(ScenarioHooks):
     def _copy_app(self, scenario: MypyPluginsScenario, app: str) -> None:
         for root, _, files in os.walk(here / app):
             for name in files:
+                if name.endswith(".pyc"):
+                    continue
+
                 location = pathlib.Path(root, name)
                 path = location.relative_to(here)
                 if not (pathlib.Path.cwd() / path).exists():
