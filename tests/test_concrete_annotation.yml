@@ -121,3 +121,153 @@
     - out: |
         main:6: error: Item "Another" of "Child1 | Child2 | Child3 | Another | ChildOther" has no attribute "two"  [union-attr]
         main:9: error: Cannot resolve keyword 'two' into field. Choices are: id, one  [misc]
+
+- case: sees_changes_in_custom_querysets_within_app
+  out: |
+    main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1]"
+    main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet]"
+    main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+  installed_apps: ["leader", "follower1"]
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from leader.models import Leader
+
+    models: Concrete[Leader]
+    reveal_type(models)
+
+    qs: ConcreteQuerySet[Leader]
+    reveal_type(qs)
+    qs.good_ones().values("nup")
+  followups:
+    - out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower1.models.follower2.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower1.models.follower2.Follower2QuerySet]"
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: good, id  [misc]
+      files:
+        - path: follower1/models/__init__.py
+          content: |
+            from .follower1 import Follower1
+            from .follower2 import Follower2
+
+            __all__ = ["Follower1", "Follower2"]
+        - path: follower1/models/follower2.py
+          content: |
+            from django.db import models
+            from leader.models import Leader
+
+            class Follower2QuerySet(models.QuerySet["Follower2"]):
+                def good_ones(self) -> "Follower2QuerySet":
+                    return self.filter(good=True)
+
+            Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+            class Follower2(Leader):
+                good = models.BooleanField()
+
+                objects = Follower2Manager()
+    - out: |
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower1.models.follower2.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower1.models.follower2.Follower2QuerySet]"
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: good, id  [misc]
+    - out: |
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower1.models.follower2.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower1.models.follower2.Follower2QuerySet]"
+        main:10: error: Item "Follower2QuerySet" of "Follower1QuerySet | Follower2QuerySet" has no attribute "good_ones"  [union-attr]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+      debug: true
+      files:
+        - path: follower1/models/follower2.py
+          content: |
+            from django.db import models
+            from leader.models import Leader
+
+            class Follower2QuerySet(models.QuerySet["Follower2"]):
+                pass
+
+            Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+            class Follower2(Leader):
+                good = models.BooleanField()
+
+                objects = Follower2Manager()
+
+- case: sees_changes_in_custom_querysets_in_new_apps
+  out: |
+    main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1]"
+    main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet]"
+    main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+  installed_apps: ["leader", "follower1"]
+  main: |
+    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+    from leader.models import Leader
+
+    models: Concrete[Leader]
+    reveal_type(models)
+
+    qs: ConcreteQuerySet[Leader]
+    reveal_type(qs)
+    qs.good_ones().values("nup")
+  followups:
+    - installed_apps: ["leader", "follower1", "follower2"]
+      out: |
+        :daemon: Restarting: plugins changed
+        :daemon: Daemon stopped
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]"
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: good, id  [misc]
+      files:
+        - path: follower2/__init__.py
+          content: ""
+        - path: follower2/apps.py
+          content: |
+            from django.apps import AppConfig
+            class Config(AppConfig):
+                default_auto_field = "django.db.models.BigAutoField"
+                name = "follower2"
+        - path: follower2/models.py
+          content: |
+            from django.db import models
+            from leader.models import Leader
+
+            class Follower2QuerySet(models.QuerySet["Follower2"]):
+                def good_ones(self) -> "Follower2QuerySet":
+                    return self.filter(good=True)
+
+            Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+            class Follower2(Leader):
+                good = models.BooleanField()
+
+                objects = Follower2Manager()
+    - out: |
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]"
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: good, id  [misc]
+    - out: |
+        main:6: note: Revealed type is "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
+        main:9: note: Revealed type is "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]"
+        main:10: error: Item "Follower2QuerySet" of "Follower1QuerySet | Follower2QuerySet" has no attribute "good_ones"  [union-attr]
+        main:10: error: Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id  [misc]
+      files:
+        - path: follower2/models.py
+          content: |
+            from django.db import models
+            from leader.models import Leader
+
+            class Follower2QuerySet(models.QuerySet["Follower2"]):
+                pass
+
+            Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+            class Follower2(Leader):
+                good = models.BooleanField()
+
+                objects = Follower2Manager()
