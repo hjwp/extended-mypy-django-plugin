@@ -1,6 +1,7 @@
 - case: simple_annotation
   out: |
      main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+     main:9: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]"
   main: |
     from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
 
@@ -8,10 +9,14 @@
 
     models: Concrete[Parent]
     reveal_type(models)
+
+    qs: ConcreteQuerySet[Parent]
+    reveal_type(qs)
 
 - case: sees_apps_removed_when_they_still_exist_but_no_longer_installed
   out: |
      main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+     main:9: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]"
   main: |
     from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
 
@@ -19,12 +24,16 @@
 
     models: Concrete[Parent]
     reveal_type(models)
+
+    qs: ConcreteQuerySet[Parent]
+    reveal_type(qs)
   followups:
     - installed_apps: ["myapp"]
       out: |
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"
+        main:9: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3]]"
 
 - case: does_not_see_apps_that_exist_but_are_not_installed
   installed_apps: ["myapp"]
@@ -37,12 +46,16 @@
 
       model: Concrete[Parent]
       model.concrete_from_myapp
+
+      qs: ConcreteQuerySet[Parent]
+      qs.values("concrete_from_myapp")
   followups:
     # but become available after being installed
     - out: |
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: error: Item "ChildOther" of "Child1 | Child2 | Child3 | ChildOther" has no attribute "concrete_from_myapp"  [union-attr]
+        main:9: error: Cannot resolve keyword 'concrete_from_myapp' into field. Choices are: concrete_from_myapp2, id, one, two  [misc]
       installed_apps: ["myapp", "myapp2"]
 
 - case: sees_models_when_they_are_added_and_installed
@@ -56,6 +69,9 @@
 
     models: Concrete[Parent]
     reveal_type(models)
+
+    qs: ConcreteQuerySet[Parent]
+    qs.values("concrete_from_myapp")
   followups:
     # but become available after being installed
     - installed_apps: ["myapp", "myapp2"]
@@ -63,9 +79,11 @@
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+        main:9: error: Cannot resolve keyword 'concrete_from_myapp' into field. Choices are: concrete_from_myapp2, id, one, two  [misc]
     # And those changes stick
     - out: |
         main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
+        main:9: error: Cannot resolve keyword 'concrete_from_myapp' into field. Choices are: concrete_from_myapp2, id, one, two  [misc]
 
 - case: sees_new_models
   out: ""
@@ -76,6 +94,9 @@
 
     models: Concrete[Parent]
     models.two
+
+    qs: ConcreteQuerySet[Parent]
+    qs.values("two")
   followups:
     # but become available after being installed
     - files:
@@ -95,6 +116,8 @@
         :daemon: Restarting: plugins changed
         :daemon: Daemon stopped
         main:6: error: Item "Another" of "Child1 | Child2 | Child3 | Another | ChildOther" has no attribute "two"  [union-attr]
+        main:9: error: Cannot resolve keyword 'two' into field. Choices are: id, one  [misc]
     # And remains
     - out: |
         main:6: error: Item "Another" of "Child1 | Child2 | Child3 | Another | ChildOther" has no attribute "two"  [union-attr]
+        main:9: error: Cannot resolve keyword 'two' into field. Choices are: id, one  [misc]
