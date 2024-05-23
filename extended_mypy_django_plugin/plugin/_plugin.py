@@ -74,13 +74,17 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         sys.path.extend(options.mypy_path)
 
         self.running_in_daemon: bool = "dmypy" in sys.argv[0]
+
+        # Ensure we have a working django context before doing anything
+        # So when we try to import things that depend on that, they don't crash us!
+        self.django_context = DjangoContext(self.plugin_config.django_settings_module)
+
         self.report = _reports.Reports.create(
             determine_django_state_script=self.plugin_config.determine_django_state_script,
             django_settings_module=self.plugin_config.django_settings_module,
             scratch_path=self.plugin_config.scratch_path,
         )
 
-        self.django_context = DjangoContext(self.plugin_config.django_settings_module)
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
