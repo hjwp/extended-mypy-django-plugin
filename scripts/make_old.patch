@@ -30,8 +30,8 @@ index b84fdfa..1bbec65 100755
      "{here}",
      "..",
      version_file=("extended_mypy_django_plugin", "version.py"),
--    name="extended_mypy_django_plugin[stubs-latest,tests]=={version}",
-+    name="extended_mypy_django_plugin[stubs-older,tests]=={version}",
+-    name="extended_mypy_django_plugin[stubs-latest]=={version}",
++    name="extended_mypy_django_plugin[stubs-older]=={version}",
  )
  
  manager.add_local_dep(

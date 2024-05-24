@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "extended-mypy-django-plugin-test-driver"
+dynamic = ["version"]
+license = { text = "MIT" }
+authors = [
+    { name = "Stephen Moore", email = "stephen@delfick.com" },
+]
+dependencies = [
+    "pytest==8.1.1"
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.version]
+path = "extended_mypy_django_plugin_test_driver/version.py"
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "/extended_mypy_django_plugin_test_driver",
+]
+
+[project.entry-points.pytest11]
+extended_mypy_django_plugin_test_driver = "extended_mypy_django_plugin_test_driver.plugin"

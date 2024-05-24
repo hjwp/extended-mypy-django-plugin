@@ -96,7 +96,7 @@ class App:
                 os.chdir(example_root)
             locations = [str(path) for path in paths]
 
-        run(bin_dir / "mypy", *locations, *args)
+        run(bin_dir / "mypy", *locations, *args, "--enable-incomplete-feature=Unpack")
 
         if not specified:
             os.chdir(here.parent / "example")
