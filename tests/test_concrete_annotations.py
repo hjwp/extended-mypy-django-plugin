@@ -256,8 +256,6 @@ class TestConcreteAnnotations:
 
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
-            expected.clear()
-
             scenario.update_file(
                 "follower1/models/__init__.py",
                 """
@@ -286,6 +284,8 @@ class TestConcreteAnnotations:
                     objects = Follower2Manager()
                 """,
             )
+
+            expected.clear()
 
             expected.daemon_should_restart()
 
@@ -386,22 +386,6 @@ class TestConcreteAnnotations:
 
         @scenario.run_and_check_mypy_after(installed_apps=["leader", "follower1", "follower2"])
         def _(expected: OutputBuilder) -> None:
-            expected.daemon_should_restart()
-
-            (
-                expected.on("main.py")
-                .change_revealed_type(
-                    6, "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
-                )
-                .change_revealed_type(
-                    9,
-                    "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]",
-                )
-                .add_error(
-                    10, "misc", "Cannot resolve keyword 'nup' into field. Choices are: good, id"
-                )
-            )
-
             scenario.update_file("follower2/__init__.py", "")
 
             scenario.update_file(
@@ -431,6 +415,22 @@ class TestConcreteAnnotations:
 
                     objects = Follower2Manager()
                 """,
+            )
+
+            expected.daemon_should_restart()
+
+            (
+                expected.on("main.py")
+                .change_revealed_type(
+                    6, "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
+                )
+                .change_revealed_type(
+                    9,
+                    "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]",
+                )
+                .add_error(
+                    10, "misc", "Cannot resolve keyword 'nup' into field. Choices are: good, id"
+                )
             )
 
         # And everything stays the same on rerun
