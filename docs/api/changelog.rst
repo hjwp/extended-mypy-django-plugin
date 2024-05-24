@@ -5,9 +5,11 @@ Changelog
 
 .. _release-0.5.3:
 
-0.5.3 - TBD
+0.5.3 - 25 May 2024
     * Resolve Invalid cross-device link error when default temporary folder
       is on a different device to the scratch path.
+    * Add a fix for a weird corner case in django-stubs where a certain pattern
+      of changes after a previous dmypy run would crash dmypy
 
 .. _release-0.5.2:
 
