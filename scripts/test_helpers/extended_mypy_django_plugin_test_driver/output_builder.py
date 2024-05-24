@@ -82,6 +82,27 @@ class OutputBuilder:
         found[0].message = f'Revealed type is "{message}"'
         return self
 
+    def remove_errors(self, lnum: int) -> Self:
+        assert self.target_file is not None
+
+        i: int = -1
+        while i < len(self._build.result):
+            if i >= len(self._build.result):
+                break
+
+            nxt = self._build.result[i]
+            if (
+                isinstance(nxt, FileOutputMatcher)
+                and nxt.fname == self.target_file.removesuffix(".py")
+                and nxt.lnum == lnum
+                and nxt.severity == "error"
+            ):
+                self._build.result.pop(i)
+            else:
+                i += 1
+
+        return self
+
     def add_error(self, lnum: int, error_type: str, message: str) -> Self:
         assert self.target_file is not None
         self._build.add(self.target_file, lnum, None, "error", f"{message}  [{error_type}]")

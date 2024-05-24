@@ -221,3 +221,258 @@ class TestConcreteAnnotations:
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
             expected.daemon_should_not_restart()
+
+    def test_sees_changes_in_custom_querysets_within_app(self, scenario: Scenario) -> None:
+        @scenario.run_and_check_mypy_after(installed_apps=["leader", "follower1"])
+        def _(expected: OutputBuilder) -> None:
+            scenario.make_file(
+                "main.py",
+                """
+                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+                from leader.models import Leader
+
+                models: Concrete[Leader]
+                reveal_type(models)
+
+                qs: ConcreteQuerySet[Leader]
+                reveal_type(qs)
+                qs.good_ones().values("nup")
+                """,
+            )
+
+            (
+                expected.on("main.py")
+                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
+                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_error(
+                    10,
+                    "misc",
+                    "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
+                )
+            )
+
+        # And then add another model
+
+        @scenario.run_and_check_mypy_after
+        def _(expected: OutputBuilder) -> None:
+            expected.clear()
+
+            scenario.update_file(
+                "follower1/models/__init__.py",
+                """
+                from .follower1 import Follower1
+                from .follower2 import Follower2
+
+                __all__ = ["Follower1", "Follower2"]
+                """,
+            )
+
+            scenario.update_file(
+                "follower1/models/follower2.py",
+                """
+                from django.db import models
+                from leader.models import Leader
+
+                class Follower2QuerySet(models.QuerySet["Follower2"]):
+                    def good_ones(self) -> "Follower2QuerySet":
+                        return self.filter(good=True)
+
+                Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+                class Follower2(Leader):
+                    good = models.BooleanField()
+
+                    objects = Follower2Manager()
+                """,
+            )
+
+            expected.daemon_should_restart()
+
+            (
+                expected.on("main.py")
+                .add_revealed_type(
+                    6,
+                    "Union[follower1.models.follower1.Follower1, follower1.models.follower2.Follower2]",
+                )
+                .add_revealed_type(
+                    9,
+                    "Union[follower1.models.follower1.Follower1QuerySet, follower1.models.follower2.Follower2QuerySet]",
+                )
+                .add_error(
+                    10,
+                    "misc",
+                    "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
+                )
+                .add_error(
+                    10, "misc", "Cannot resolve keyword 'nup' into field. Choices are: good, id"
+                )
+            )
+
+        # And same output, no daemon restart on no change
+
+        @scenario.run_and_check_mypy_after
+        def _(expected: OutputBuilder) -> None:
+            expected.daemon_should_not_restart()
+
+        # And removing the method from the queryset
+
+        @scenario.run_and_check_mypy_after
+        def _(expected: OutputBuilder) -> None:
+            scenario.update_file(
+                "follower1/models/follower2.py",
+                """
+                from django.db import models
+                from leader.models import Leader
+
+                class Follower2QuerySet(models.QuerySet["Follower2"]):
+                    pass
+
+                Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+                class Follower2(Leader):
+                    good = models.BooleanField()
+
+                    objects = Follower2Manager()
+                """,
+            )
+
+            (
+                expected.on("main.py")
+                .remove_errors(10)
+                .add_error(
+                    10,
+                    "union-attr",
+                    'Item "Follower2QuerySet" of "Follower1QuerySet | Follower2QuerySet" has no attribute "good_ones"',
+                )
+                .add_error(
+                    10,
+                    "misc",
+                    "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
+                )
+            )
+
+    def test_sees_changes_in_custom_querysets_in_new_apps(self, scenario: Scenario) -> None:
+        @scenario.run_and_check_mypy_after(installed_apps=["leader", "follower1"])
+        def _(expected: OutputBuilder) -> None:
+            scenario.make_file(
+                "main.py",
+                """
+                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+
+                from leader.models import Leader
+
+                models: Concrete[Leader]
+                reveal_type(models)
+
+                qs: ConcreteQuerySet[Leader]
+                reveal_type(qs)
+                qs.good_ones().values("nup")
+                """,
+            )
+
+            (
+                expected.on("main.py")
+                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
+                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_error(
+                    10,
+                    "misc",
+                    "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
+                )
+            )
+
+        # Let's then add a new app with new models
+
+        @scenario.run_and_check_mypy_after(installed_apps=["leader", "follower1", "follower2"])
+        def _(expected: OutputBuilder) -> None:
+            expected.daemon_should_restart()
+
+            (
+                expected.on("main.py")
+                .change_revealed_type(
+                    6, "Union[follower1.models.follower1.Follower1, follower2.models.Follower2]"
+                )
+                .change_revealed_type(
+                    9,
+                    "Union[follower1.models.follower1.Follower1QuerySet, follower2.models.Follower2QuerySet]",
+                )
+                .add_error(
+                    10, "misc", "Cannot resolve keyword 'nup' into field. Choices are: good, id"
+                )
+            )
+
+            scenario.update_file("follower2/__init__.py", "")
+
+            scenario.update_file(
+                "follower2/apps.py",
+                """
+                from django.apps import AppConfig
+                class Config(AppConfig):
+                    default_auto_field = "django.db.models.BigAutoField"
+                    name = "follower2"
+                """,
+            )
+
+            scenario.update_file(
+                "follower2/models.py",
+                """
+                from django.db import models
+                from leader.models import Leader
+
+                class Follower2QuerySet(models.QuerySet["Follower2"]):
+                    def good_ones(self) -> "Follower2QuerySet":
+                        return self.filter(good=True)
+
+                Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+                class Follower2(Leader):
+                    good = models.BooleanField()
+
+                    objects = Follower2Manager()
+                """,
+            )
+
+        # And everything stays the same on rerun
+
+        @scenario.run_and_check_mypy_after
+        def _(expected: OutputBuilder) -> None:
+            expected.daemon_should_not_restart()
+            scenario.run_and_check_mypy(expected)
+
+        # And it sees where custom queryset gets queryset manager removed
+
+        @scenario.run_and_check_mypy_after
+        def _(expected: OutputBuilder) -> None:
+            scenario.update_file(
+                "follower2/models.py",
+                """
+                from django.db import models
+                from leader.models import Leader
+
+                class Follower2QuerySet(models.QuerySet["Follower2"]):
+                    pass
+
+                Follower2Manager = models.Manager.from_queryset(Follower2QuerySet)
+
+                class Follower2(Leader):
+                    good = models.BooleanField()
+
+                    objects = Follower2Manager()
+                """,
+            )
+
+            (
+                expected.on("main.py")
+                .remove_errors(10)
+                .add_error(
+                    10,
+                    "union-attr",
+                    'Item "Follower2QuerySet" of "Follower1QuerySet | Follower2QuerySet" has no attribute "good_ones"',
+                )
+                .add_error(
+                    10,
+                    "misc",
+                    "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
+                )
+            )
