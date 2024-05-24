@@ -6,6 +6,7 @@ import itertools
 import pathlib
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -63,6 +64,10 @@ class _Store:
             mod: str | None = None
             summary: str | None = None
 
+            if path.is_dir():
+                shutil.rmtree(path)
+                continue
+
             if path.suffix == ".py":
                 for line in path.read_text().splitlines():
                     m = regexes["mod_decl"].match(line)
@@ -118,7 +123,7 @@ class _Store:
         return name
 
     def add_mod(self, mod: str) -> str:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=self.reports_dir, prefix=".tmp") as tmp:
             temp_dir = pathlib.Path(tmp)
             summary = f"{mod} ||>"
             name = self._write_mod(temp_dir, mod, summary, empty=True)
@@ -137,7 +142,7 @@ class _Store:
 
         # Prevent partial writes by dumping to a temp directory and moving changed files
         # We also don't simply rename the entire directory so unchanged files remain unchanged
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=self.reports_dir, prefix=".tmp") as tmp:
             temp_dir = pathlib.Path(tmp)
             for mod, summary in instance.modules.items():
                 instance._write_mod(temp_dir, mod, summary)
@@ -308,6 +313,12 @@ class Reports:
     def lines_hash(self) -> str:
         buffer = io.BytesIO()
         for path in self._store.reports_dir.iterdir():
+            valid_dependency = (
+                path.is_file() and path.suffix == ".py" and not path.name.startswith(".")
+            )
+            if not valid_dependency:
+                continue
+
             content = path.read_bytes()
             if b"def value_not_installed" not in content:
                 buffer.write(b"\n")

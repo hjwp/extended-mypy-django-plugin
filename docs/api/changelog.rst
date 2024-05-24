@@ -3,6 +3,12 @@
 Changelog
 ---------
 
+.. _release-0.5.3:
+
+0.5.3 - TBD
+    * Resolve Invalid cross-device link error when default temporary folder
+      is on a different device to the scratch path.
+
 .. _release-0.5.2:
 
 0.5.2 - 22 May 2024
