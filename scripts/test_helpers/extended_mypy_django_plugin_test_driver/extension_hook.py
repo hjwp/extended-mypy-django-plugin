@@ -17,7 +17,7 @@ from pytest_mypy_plugins import (
     ScenarioHooksRunAndCheckOptions,
 )
 
-here = pathlib.Path(__file__).parent
+scripts_dir = pathlib.Path(__file__).parent.parent.parent
 
 
 def django_plugin_hook(item: ItemForHook) -> None:
@@ -141,19 +141,19 @@ class Hooks(ScenarioHooks):
             installed_apps = []
 
         for app in installed_apps:
-            if (here / app).exists():
+            if (scripts_dir / app).exists():
                 self._copy_app(scenario, app)
 
         return options
 
     def _copy_app(self, scenario: MypyPluginsScenario, app: str) -> None:
-        for root, _, files in os.walk(here / app):
+        for root, _, files in os.walk(scripts_dir / app):
             for name in files:
                 if name.endswith(".pyc"):
                     continue
 
                 location = pathlib.Path(root, name)
-                path = location.relative_to(here)
+                path = location.relative_to(scripts_dir)
                 if not (pathlib.Path.cwd() / path).exists():
                     scenario.handle_followup_file(
                         FollowupFile(path=str(path), content=location.read_text())

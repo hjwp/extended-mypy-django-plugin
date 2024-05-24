@@ -13,9 +13,6 @@ authors = [
 ]
 
 [project.optional-dependencies]
-tests = [
-    "pytest==8.1.1",
-]
 stubs-latest = [
     "mypy==1.10.0",
     "django-stubs==5.0.0",
