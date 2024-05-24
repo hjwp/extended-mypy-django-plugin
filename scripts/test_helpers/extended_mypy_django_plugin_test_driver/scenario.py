@@ -46,6 +46,13 @@ class Scenario:
         self.scenario.make_file(file)
         return file
 
+    def append_to_file(self, path: str, content: str) -> FollowupFile:
+        location = self.scenario.execution_path / path
+        assert location.exists()
+        file = FollowupFile(path=path, content=location.read_text() + textwrap.dedent(content))
+        self.scenario.handle_followup_file(file)
+        return file
+
     def update_file(self, path: str, content: str | None) -> FollowupFile:
         if isinstance(content, str):
             content = textwrap.dedent(content).lstrip()

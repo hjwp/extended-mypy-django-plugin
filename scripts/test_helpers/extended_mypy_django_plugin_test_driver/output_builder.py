@@ -50,6 +50,10 @@ class OutputBuilder:
         self._build.daemon_should_restart = True
         return self
 
+    def daemon_should_not_restart(self) -> Self:
+        self._build.daemon_should_restart = False
+        return self
+
     def on(self, path: str) -> Self:
         return self.__class__(build=self._build, target_file=path)
 
@@ -58,6 +62,29 @@ class OutputBuilder:
         self._build.add(
             self.target_file, lnum, None, "note", f'Revealed type is "{revealed_type}"'
         )
+        return self
+
+    def change_revealed_type(self, lnum: int, message: str) -> Self:
+        assert self.target_file is not None
+
+        found: list[FileOutputMatcher] = []
+        for matcher in self._build.result:
+            if (
+                isinstance(matcher, FileOutputMatcher)
+                and matcher.fname == self.target_file.removesuffix(".py")
+                and matcher.lnum == lnum
+                and matcher.severity == "note"
+                and matcher.message.startswith("Revealed type is")
+            ):
+                found.append(matcher)
+
+        assert len(found) == 1
+        found[0].message = f'Revealed type is "{message}"'
+        return self
+
+    def add_error(self, lnum: int, error_type: str, message: str) -> Self:
+        assert self.target_file is not None
+        self._build.add(self.target_file, lnum, None, "error", f"{message}  [{error_type}]")
         return self
 
     def remove_from_revealed_type(self, lnum: int, remove: str) -> Self:
