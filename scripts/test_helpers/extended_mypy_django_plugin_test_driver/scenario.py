@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Protocol, TypedDict, overload
 
 from pytest_mypy_plugins import File, FollowupFile, MypyPluginsConfig, MypyPluginsScenario
+from pytest_mypy_plugins.scenario import Strategy
 from typing_extensions import NotRequired, Unpack
 
 from .output_builder import OutputBuilder
@@ -38,7 +39,7 @@ class Scenario:
     def __init__(self, config: MypyPluginsConfig, scenario: MypyPluginsScenario) -> None:
         self.config = config
         self.scenario = scenario
-        self.expected = OutputBuilder()
+        self.expected = OutputBuilder(for_daemon=self.config.strategy is Strategy.DAEMON)
 
     def make_file(self, path: str, content: str) -> File:
         file = File(path=path, content=textwrap.dedent(content).lstrip())

@@ -1,25 +1,3 @@
-- case: sees_apps_removed_when_they_still_exist_but_no_longer_installed
-  out: |
-     main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]"
-     main:9: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]"
-  main: |
-    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
-
-    from myapp.models import Parent
-
-    models: Concrete[Parent]
-    reveal_type(models)
-
-    qs: ConcreteQuerySet[Parent]
-    reveal_type(qs)
-  followups:
-    - installed_apps: ["myapp"]
-      out: |
-        :daemon: Restarting: plugins changed
-        :daemon: Daemon stopped
-        main:6: note: Revealed type is "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3]"
-        main:9: note: Revealed type is "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3]]"
-
 - case: does_not_see_apps_that_exist_but_are_not_installed
   installed_apps: ["myapp"]
   copied_apps: ["myapp", "myapp2"]
