@@ -170,7 +170,6 @@ class TestConcreteAnnotations:
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
             expected.daemon_should_not_restart()
-            scenario.run_and_check_mypy(expected)
 
     def test_sees_new_models(self, scenario: Scenario) -> None:
         @scenario.run_and_check_mypy_after
@@ -438,7 +437,6 @@ class TestConcreteAnnotations:
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
             expected.daemon_should_not_restart()
-            scenario.run_and_check_mypy(expected)
 
         # And it sees where custom queryset gets queryset manager removed
 
