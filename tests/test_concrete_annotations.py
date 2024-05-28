@@ -43,7 +43,7 @@ class TestConcreteAnnotations:
                 )
                 .add_revealed_type(
                     10,
-                    "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
                 )
                 .add_revealed_type(
                     20,
@@ -83,7 +83,7 @@ class TestConcreteAnnotations:
                 )
                 .add_revealed_type(
                     9,
-                    "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
                 )
             )
 
@@ -101,7 +101,7 @@ class TestConcreteAnnotations:
                 )
                 .remove_from_revealed_type(
                     9,
-                    ", django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]",
+                    ", django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]",
                 )
             )
 

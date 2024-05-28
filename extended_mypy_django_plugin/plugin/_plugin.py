@@ -1,4 +1,3 @@
-import collections
 import sys
 from typing import Generic
 
@@ -9,7 +8,6 @@ from mypy.options import Options
 from mypy.plugin import (
     AnalyzeTypeContext,
     AttributeContext,
-    ClassDefContext,
     DynamicClassDefContext,
     FunctionContext,
     FunctionSigContext,
@@ -28,16 +26,7 @@ from mypy_django_plugin.transformers.managers import (
 )
 from typing_extensions import assert_never
 
-from . import (
-    _config,
-    _dependencies,
-    _helpers,
-    _hook,
-    _known_annotations,
-    _reports,
-    _store,
-    actions,
-)
+from . import _config, _dependencies, _hook, _known_annotations, _reports, _store, actions
 
 
 class Hook(
@@ -150,65 +139,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             file.fullname, imports=file.imports, super_deps=super().get_additional_deps(file)
         )
         return results
-
-    @_hook.hook
-    class get_base_class_hook(Hook[ClassDefContext, None]):
-        """
-        We need to make up for a bug in django-stubs
-        """
-
-        def choose(self) -> bool:
-            if self.super_hook is None:
-                return False
-
-            if _helpers.get_is_abstract_model() is None:
-                return False
-
-            sym = self.plugin.lookup_fully_qualified(self.fullname)
-            return bool(
-                sym is not None
-                and isinstance(sym.node, TypeInfo)
-                and _helpers.is_model_type(sym.node)
-            )
-
-        def run(self, ctx: ClassDefContext) -> None:
-            if self.super_hook is None:
-                return None
-
-            # Copy the code in django-stubs that crashes
-            # And fill in the missing information before continuing
-            processed_models = set()
-            model_bases = collections.deque([ctx.cls])
-            while model_bases:
-                model = model_bases.popleft()
-
-                try:
-                    # Whether this causes an AssertionError or an AttributeError depends
-                    # on whether mypy is compiled or not
-                    # Note that this only appears to trigger on followup changes with a cache
-                    # in very specific situations
-                    for base in model.info.bases:
-                        break
-                except AssertionError as exc:
-                    if str(exc) == "ClassDef is lacking info":
-                        sym = self.plugin.lookup_fully_qualified(model.fullname)
-                        if sym and isinstance(sym.node, TypeInfo):
-                            model.info = sym.node
-                except AttributeError as exc:
-                    if str(exc) == "attribute 'bases' of 'TypeInfo' undefined":
-                        sym = self.plugin.lookup_fully_qualified(model.fullname)
-                        if sym and isinstance(sym.node, TypeInfo):
-                            model.info = sym.node
-
-                for base in model.info.bases:
-                    if (
-                        _helpers.is_abstract_model(base.type)
-                        and base.type.fullname not in processed_models
-                    ):
-                        model_bases.append(base.type.defn)
-                        processed_models.add(base.type.fullname)
-
-            return self.super_hook(ctx)
 
     @_hook.hook
     class get_dynamic_class_hook(Hook[DynamicClassDefContext, None]):

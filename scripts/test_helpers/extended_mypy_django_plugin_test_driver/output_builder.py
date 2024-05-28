@@ -47,6 +47,14 @@ class OutputBuilder:
 
         self.target_file = target_file
 
+    def _normalise_message(self, message: str) -> str:
+        if importlib.metadata.version("mypy") == "1.4.0":
+            return message.replace("type[", "Type[").replace(
+                "django.db.models.query.QuerySet", "django.db.models.query._QuerySet"
+            )
+        else:
+            return message
+
     def clear(self) -> Self:
         self._build.result.clear()
         return self
@@ -63,6 +71,11 @@ class OutputBuilder:
         return self.__class__(build=self._build, target_file=path)
 
     def from_out(self, out: str, regex: bool = False) -> Self:
+        if importlib.metadata.version("mypy") == "1.4.0":
+            out = out.replace("type[", "Type[").replace(
+                "django.db.models.query.QuerySet", "django.db.models.query._QuerySet"
+            )
+
         self._build.result.extend(
             extract_output_matchers_from_out(
                 out, {}, regex=regex, for_daemon=self._build.for_daemon
@@ -71,8 +84,8 @@ class OutputBuilder:
         return self
 
     def add_revealed_type(self, lnum: int, revealed_type: str) -> Self:
-        if importlib.metadata.version("mypy") == "1.4.0":
-            revealed_type = revealed_type.replace("type[", "Type[")
+        revealed_type = self._normalise_message(revealed_type)
+
         assert self.target_file is not None
         self._build.add(
             self.target_file, lnum, None, "note", f'Revealed type is "{revealed_type}"'
@@ -80,8 +93,7 @@ class OutputBuilder:
         return self
 
     def change_revealed_type(self, lnum: int, message: str) -> Self:
-        if importlib.metadata.version("mypy") == "1.4.0":
-            message = message.replace("type[", "Type[")
+        message = self._normalise_message(message)
 
         assert self.target_file is not None
 
@@ -122,11 +134,15 @@ class OutputBuilder:
         return self
 
     def add_error(self, lnum: int, error_type: str, message: str) -> Self:
+        message = self._normalise_message(message)
+
         assert self.target_file is not None
         self._build.add(self.target_file, lnum, None, "error", f"{message}  [{error_type}]")
         return self
 
     def remove_from_revealed_type(self, lnum: int, remove: str) -> Self:
+        remove = self._normalise_message(remove)
+
         assert self.target_file is not None
 
         found: list[FileOutputMatcher] = []

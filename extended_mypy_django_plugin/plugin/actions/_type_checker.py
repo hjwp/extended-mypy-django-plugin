@@ -312,8 +312,8 @@ class TypeChecking:
             assert isinstance(concrete, Instance)
             try:
                 result.extend(self.store.realise_querysets(concrete, self.lookup_info))
-            except _store.RestartDmypy:
-                self.api.fail("You probably need to restart dmypy", context)
+            except _store.RestartDmypy as err:
+                self.api.fail(f"You probably need to restart dmypy: {err}", context)
                 return AnyType(TypeOfAny.from_error)
             except _store.UnionMustBeOfTypes:
                 self.api.fail("Union must be of instances of models", context)
@@ -326,8 +326,8 @@ class TypeChecking:
     ) -> MypyType:
         try:
             querysets = tuple(self.store.realise_querysets(instances, self.lookup_info))
-        except _store.RestartDmypy:
-            self.api.fail("You probably need to restart dmypy", context)
+        except _store.RestartDmypy as err:
+            self.api.fail(f"You probably need to restart dmypy: {err}", context)
             return AnyType(TypeOfAny.from_error)
         except _store.UnionMustBeOfTypes:
             self.api.fail("Union must be of instances of models", context)
