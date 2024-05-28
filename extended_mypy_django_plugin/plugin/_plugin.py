@@ -276,11 +276,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
         """
-        Find functions that return a ``DefaultQuerySet`` annotation with a type variable
-        and resolve the annotation.
+        Find functions that return a concrete annotation with a type var and resolve that annotation
         """
 
         def choose(self) -> bool:
+            if self.fullname.startswith("builtins."):
+                return False
+
             sym = self.plugin.lookup_fully_qualified(self.fullname)
             if not sym or not sym.node:
                 return False
@@ -294,12 +296,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: FunctionContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(self.store, api=ctx.api)
-
-            result = type_checking.modify_default_queryset_return_type(
-                ctx,
-                desired_annotation_fullname=ExtendedMypyStubs.Annotations.DEFAULT_QUERYSET.value,
+            type_checking = actions.TypeChecking(
+                self.store,
+                api=ctx.api,
+                lookup_info=self.plugin._lookup_info,
             )
+
+            result = type_checking.modify_return_type(ctx)
 
             if result is not None:
                 return result
@@ -322,7 +325,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: AttributeContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(self.store, api=ctx.api)
+            type_checking = actions.TypeChecking(
+                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
+            )
 
             return type_checking.extended_get_attribute_resolve_manager_method(
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
