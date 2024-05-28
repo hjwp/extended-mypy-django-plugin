@@ -274,6 +274,27 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return method(unbound_type=ctx.type)
 
     @_hook.hook
+    class get_attribute_hook(Hook[AttributeContext, MypyType]):
+        """
+        An implementation of the change found in
+        https://github.com/typeddjango/django-stubs/pull/2027
+        """
+
+        def choose(self) -> bool:
+            return self.super_hook is resolve_manager_method
+
+        def run(self, ctx: AttributeContext) -> MypyType:
+            assert isinstance(ctx.api, TypeChecker)
+
+            type_checking = actions.TypeChecking(
+                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
+            )
+
+            return type_checking.extended_get_attribute_resolve_manager_method(
+                ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
+            )
+
+    @_hook.hook
     class get_function_hook(Hook[FunctionContext, MypyType]):
         """
         Find functions that return a concrete annotation with a type var and resolve that annotation
@@ -311,24 +332,3 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 return self.super_hook(ctx)
 
             return ctx.default_return_type
-
-    @_hook.hook
-    class get_attribute_hook(Hook[AttributeContext, MypyType]):
-        """
-        An implementation of the change found in
-        https://github.com/typeddjango/django-stubs/pull/2027
-        """
-
-        def choose(self) -> bool:
-            return self.super_hook is resolve_manager_method
-
-        def run(self, ctx: AttributeContext) -> MypyType:
-            assert isinstance(ctx.api, TypeChecker)
-
-            type_checking = actions.TypeChecking(
-                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
-            )
-
-            return type_checking.extended_get_attribute_resolve_manager_method(
-                ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
-            )
