@@ -12,11 +12,13 @@ from mypy.plugin import (
     ClassDefContext,
     DynamicClassDefContext,
     FunctionContext,
+    FunctionSigContext,
     MethodContext,
+    MethodSigContext,
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType, Instance
+from mypy.types import CallableType, FunctionLike, Instance
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -269,6 +271,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             elif name is Known.DEFAULT_QUERYSET:
                 method = type_analyzer.find_default_queryset
+
             else:
                 assert_never(name)
 
@@ -299,6 +302,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         """
         Shared logic for modifying the return type of methods and functions that use a concrete
         annotation with a type variable.
+
+        Note that the signature hook will already raise errors if a concrete annotation is
+        used with a type var in a type guard.
         """
 
         def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
@@ -377,3 +383,87 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 return self.super_hook(ctx)
 
             return ctx.default_return_type
+
+    class SharedSignatureHookLogic:
+        """
+        Shared logic for modifying the signature of methods and functions.
+
+        This is only used to find cases where a concrete annotation with a type var
+        is used in a type guard.
+
+        In this situation the mypy plugin system does not provide an opportunity to fully resolve
+        the type guard.
+        """
+
+        def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
+            self.plugin = plugin
+            self.store = plugin.store
+            self.fullname = fullname
+
+        def choose(self) -> bool:
+            """
+            Only choose methods and functions that are returning a type guard
+            """
+            if self.fullname.startswith("builtins."):
+                return False
+
+            sym = self.plugin.lookup_fully_qualified(self.fullname)
+            if not sym or not sym.node:
+                return False
+
+            call = getattr(sym.node, "type", None)
+            if not isinstance(call, CallableType):
+                return False
+
+            return call.type_guard is not None
+
+        def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
+            assert isinstance(ctx.api, TypeChecker)
+
+            type_checking = actions.TypeChecking(
+                self.store,
+                api=ctx.api,
+                lookup_info=self.plugin._lookup_info,
+            )
+
+            return type_checking.check_typeguard(ctx.context)
+
+    @_hook.hook
+    class get_function_signature_hook(Hook[FunctionSigContext, FunctionLike]):
+        def extra_init(self) -> None:
+            self.shared_logic = self.plugin.SharedSignatureHookLogic(
+                fullname=self.fullname, plugin=self.plugin
+            )
+
+        def choose(self) -> bool:
+            return self.shared_logic.choose()
+
+        def run(self, ctx: FunctionSigContext) -> FunctionLike:
+            result = self.shared_logic.run(ctx)
+            if result is not None:
+                return ctx.default_signature.copy_modified(ret_type=result)
+
+            if self.super_hook is not None:
+                return self.super_hook(ctx)
+
+            return ctx.default_signature
+
+    @_hook.hook
+    class get_method_signature_hook(Hook[MethodSigContext, FunctionLike]):
+        def extra_init(self) -> None:
+            self.shared_logic = self.plugin.SharedSignatureHookLogic(
+                fullname=self.fullname, plugin=self.plugin
+            )
+
+        def choose(self) -> bool:
+            return self.shared_logic.choose()
+
+        def run(self, ctx: MethodSigContext) -> FunctionLike:
+            result = self.shared_logic.run(ctx)
+            if result is not None:
+                return ctx.default_signature.copy_modified(ret_type=result)
+
+            if self.super_hook is not None:
+                return self.super_hook(ctx)
+
+            return ctx.default_signature

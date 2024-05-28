@@ -62,6 +62,7 @@ def _find_type_vars(
 @dataclasses.dataclass
 class BasicTypeInfo:
     is_type: bool
+    is_guard: bool
     api: TypeChecker
     func: CallableType
 
@@ -72,9 +73,14 @@ class BasicTypeInfo:
     @classmethod
     def create(cls, api: TypeChecker, func: CallableType, item: MypyType | None = None) -> Self:
         is_type: bool = False
+        is_guard: bool = False
 
         if item is None:
-            item = func.ret_type
+            if func.type_guard:
+                is_guard = True
+                item = func.type_guard
+            else:
+                item = func.ret_type
 
         item = get_proper_type(item)
         if isinstance(item, TypeType):
@@ -102,6 +108,7 @@ class BasicTypeInfo:
             func=func,
             item=item,
             is_type=is_type,
+            is_guard=is_guard,
             type_vars=type_vars,
             concrete_annotation=concrete_annotation,
         )
@@ -189,9 +196,28 @@ class TypeChecking:
 
         return BasicTypeInfo.create(api=self.api, func=func)
 
+    def check_typeguard(self, context: Context) -> MypyType | None:
+        info = self._get_info(context)
+        if info is None:
+            return None
+
+        if info.is_guard and info.type_vars and info.contains_concrete_annotation:
+            # Mypy plugin system doesn't currently provide an opportunity to resolve a type guard when it's for a concrete annotation that uses a type var
+            self.api.fail(
+                "Can't use a TypeGuard that uses a Concrete Annotation that uses type variables",
+                context,
+            )
+            return AnyType(TypeOfAny.from_error)
+
+        return None
+
     def modify_return_type(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
         info = self._get_info(ctx.context)
         if info is None:
+            return None
+
+        if info.is_guard and info.type_vars and info.concrete_annotation is not None:
+            # Mypy plugin system doesn't currently provide an opportunity to resolve a type guard when it's for a concrete annotation that uses a type var
             return None
 
         if not info.contains_concrete_annotation:

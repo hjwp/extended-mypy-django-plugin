@@ -9,26 +9,49 @@ class TestConcreteAnnotations:
                 "main.py",
                 """
                 from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from typing import cast, TypeGuard
 
-                from myapp.models import Parent
+                from myapp.models import Parent, Child1
 
                 models: Concrete[Parent]
                 reveal_type(models)
 
                 qs: ConcreteQuerySet[Parent]
                 reveal_type(qs)
+
+                def check_cls_with_type_guard(cls: type[Parent]) -> TypeGuard[type[Concrete[Parent]]]:
+                    return True
+
+                def check_instance_with_type_guard(cls: Parent) -> TypeGuard[Concrete[Parent]]:
+                    return True
+
+                cls: type[Parent] = Child1
+                assert check_cls_with_type_guard(cls)
+                reveal_type(cls)
+
+                instance: Parent = cast(Child1, None)
+                assert check_instance_with_type_guard(instance)
+                reveal_type(instance)
                 """,
             )
 
             (
                 expected.on("main.py")
                 .add_revealed_type(
-                    6,
+                    7,
                     "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
                 )
                 .add_revealed_type(
-                    9,
+                    10,
                     "Union[django.db.models.query._QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query._QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query._QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
+                )
+                .add_revealed_type(
+                    20,
+                    "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
+                )
+                .add_revealed_type(
+                    24,
+                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
                 )
             )
 
