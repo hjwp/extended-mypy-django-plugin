@@ -49,8 +49,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     .. automethod:: get_additional_deps
 
-    .. autoattribute:: get_base_class_hook
-
     .. autoattribute:: get_dynamic_class_hook
 
     .. autoattribute:: get_type_analyze_hook
@@ -273,8 +271,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             return type_checking.modify_return_type(ctx)
 
-    @_hook.hook
-    class get_method_hook(Hook[MethodContext, MypyType]):
+    class _get_method_or_function_hook(Hook[MethodContext | FunctionContext, MypyType]):
         def extra_init(self) -> None:
             self.shared_logic = self.plugin.SharedCallableHookLogic(
                 fullname=self.fullname, plugin=self.plugin
@@ -283,7 +280,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def choose(self) -> bool:
             return self.shared_logic.choose()
 
-        def run(self, ctx: MethodContext) -> MypyType:
+        def run(self, ctx: FunctionContext | MethodContext) -> MypyType:
             result = self.shared_logic.run(ctx)
             if result is not None:
                 return result
@@ -294,25 +291,12 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return ctx.default_return_type
 
     @_hook.hook
-    class get_function_hook(Hook[FunctionContext, MypyType]):
-        def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedCallableHookLogic(
-                fullname=self.fullname, plugin=self.plugin
-            )
+    class get_method_hook(_get_method_or_function_hook):
+        pass
 
-        def choose(self) -> bool:
-            return self.shared_logic.choose()
-
-        def run(self, ctx: FunctionContext) -> MypyType:
-            result = self.shared_logic.run(ctx)
-
-            if result is not None:
-                return result
-
-            if self.super_hook is not None:
-                return self.super_hook(ctx)
-
-            return ctx.default_return_type
+    @_hook.hook
+    class get_function_hook(_get_method_or_function_hook):
+        pass
 
     class SharedSignatureHookLogic:
         """
@@ -358,8 +342,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             return type_checking.check_typeguard(ctx.context)
 
-    @_hook.hook
-    class get_function_signature_hook(Hook[FunctionSigContext, FunctionLike]):
+    class _get_method_or_function_signature_hook(
+        Hook[MethodSigContext | FunctionSigContext, FunctionLike]
+    ):
         def extra_init(self) -> None:
             self.shared_logic = self.plugin.SharedSignatureHookLogic(
                 fullname=self.fullname, plugin=self.plugin
@@ -368,7 +353,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def choose(self) -> bool:
             return self.shared_logic.choose()
 
-        def run(self, ctx: FunctionSigContext) -> FunctionLike:
+        def run(self, ctx: MethodSigContext | FunctionSigContext) -> FunctionLike:
             result = self.shared_logic.run(ctx)
             if result is not None:
                 return ctx.default_signature.copy_modified(ret_type=result)
@@ -379,21 +364,9 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return ctx.default_signature
 
     @_hook.hook
-    class get_method_signature_hook(Hook[MethodSigContext, FunctionLike]):
-        def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedSignatureHookLogic(
-                fullname=self.fullname, plugin=self.plugin
-            )
+    class get_method_signature_hook(_get_method_or_function_signature_hook):
+        pass
 
-        def choose(self) -> bool:
-            return self.shared_logic.choose()
-
-        def run(self, ctx: MethodSigContext) -> FunctionLike:
-            result = self.shared_logic.run(ctx)
-            if result is not None:
-                return ctx.default_signature.copy_modified(ret_type=result)
-
-            if self.super_hook is not None:
-                return self.super_hook(ctx)
-
-            return ctx.default_signature
+    @_hook.hook
+    class get_function_signature_hook(_get_method_or_function_signature_hook):
+        pass
