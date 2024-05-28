@@ -67,8 +67,8 @@ class TypeAnalyzing:
 
         try:
             querysets = tuple(self.store.realise_querysets(UnionType(concrete), self.lookup_info))
-        except _store.RestartDmypy:
-            self.api.fail("You probably need to restart dmypy", unbound_type)
+        except _store.RestartDmypy as err:
+            self.api.fail(f"You probably need to restart dmypy: {err}", unbound_type)
             return AnyType(TypeOfAny.from_error)
         except _store.UnionMustBeOfTypes:
             self.api.fail("Union must be of instances of models", unbound_type)
@@ -93,8 +93,8 @@ class TypeAnalyzing:
 
         try:
             querysets = tuple(self.store.realise_querysets(type_arg, self.lookup_info))
-        except _store.RestartDmypy:
-            self.api.fail("You probably need to restart dmypy", unbound_type)
+        except _store.RestartDmypy as err:
+            self.api.fail(f"You probably need to restart dmypy: {err}", unbound_type)
             return AnyType(TypeOfAny.from_error)
         except _store.UnionMustBeOfTypes:
             self.api.fail("Union must be of instances of models", unbound_type)

@@ -1,3 +1,4 @@
+import importlib.metadata
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Protocol
 
@@ -8,8 +9,11 @@ from mypy.types import Type as MypyType
 
 from ._reports import ModelModules
 
-QUERYSET_CLASS_FULLNAME = "django.db.models.query._QuerySet"
 MODEL_CLASS_FULLNAME = "django.db.models.base.Model"
+
+QUERYSET_CLASS_FULLNAME = "django.db.models.query.QuerySet"
+if importlib.metadata.version("mypy") == "1.4.0":
+    QUERYSET_CLASS_FULLNAME = "django.db.models.query._QuerySet"
 
 
 class UnionMustBeOfTypes(Exception):
@@ -99,7 +103,7 @@ class Store:
         for fullname, model in querysets:
             queryset = lookup_info(fullname)
             if not queryset:
-                raise RestartDmypy()
+                raise RestartDmypy(f"Could not find queryset for {fullname}")
 
             if not queryset.is_generic():
                 yield Instance(queryset, [])
@@ -184,7 +188,7 @@ class Store:
         """
         model_cls = self._get_model_class_by_fullname(model.fullname)
         if model_cls is None:
-            raise RestartDmypy()
+            raise RestartDmypy(f"Could not find model class for {model.fullname}")
 
         manager = model_cls._default_manager
         if manager is None:
@@ -203,7 +207,7 @@ class Store:
 
             base_manager_info = lookup_info(base_manager_fullname)
             if not base_manager_info:
-                raise RestartDmypy()
+                raise RestartDmypy(f"Could not find base manager for {base_manager_fullname}")
 
             metadata = base_manager_info.metadata
 

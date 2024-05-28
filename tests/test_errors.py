@@ -84,6 +84,6 @@ class TestErrors:
                     line
                     for line in out.split("\n")
                     if "Only concrete class can be given" not in line
-                ).replace('Revealed type is "type', 'Revealed type is "Type')
+                )
 
             expected.from_out(out)

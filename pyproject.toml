@@ -15,7 +15,7 @@ authors = [
 [project.optional-dependencies]
 stubs-latest = [
     "mypy==1.10.0",
-    "django-stubs==5.0.0",
+    "django-stubs==5.0.2",
 ]
 stubs-older = [
     "mypy==1.4.0",
