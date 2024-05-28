@@ -30,7 +30,7 @@ class TypeAnalyzing:
         type_arg = get_proper_type(self.api.analyze_type(args[0]))
 
         if not isinstance(type_arg, Instance):
-            return UnionType(())
+            return unbound_type
 
         concrete = tuple(
             self.store.retrieve_concrete_children_types(

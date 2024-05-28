@@ -1,7 +1,12 @@
+import importlib.metadata
 from collections.abc import Iterator
 
 from pytest_mypy_plugins import OutputMatcher
-from pytest_mypy_plugins.utils import DaemonOutputMatcher, FileOutputMatcher
+from pytest_mypy_plugins.utils import (
+    DaemonOutputMatcher,
+    FileOutputMatcher,
+    extract_output_matchers_from_out,
+)
 from typing_extensions import Self
 
 
@@ -57,7 +62,17 @@ class OutputBuilder:
     def on(self, path: str) -> Self:
         return self.__class__(build=self._build, target_file=path)
 
+    def from_out(self, out: str, regex: bool = False) -> Self:
+        self._build.result.extend(
+            extract_output_matchers_from_out(
+                out, {}, regex=regex, for_daemon=self._build.for_daemon
+            )
+        )
+        return self
+
     def add_revealed_type(self, lnum: int, revealed_type: str) -> Self:
+        if importlib.metadata.version("mypy") == "1.4.0":
+            revealed_type = revealed_type.replace("type[", "Type[")
         assert self.target_file is not None
         self._build.add(
             self.target_file, lnum, None, "note", f'Revealed type is "{revealed_type}"'
@@ -65,6 +80,9 @@ class OutputBuilder:
         return self
 
     def change_revealed_type(self, lnum: int, message: str) -> Self:
+        if importlib.metadata.version("mypy") == "1.4.0":
+            message = message.replace("type[", "Type[")
+
         assert self.target_file is not None
 
         found: list[FileOutputMatcher] = []
