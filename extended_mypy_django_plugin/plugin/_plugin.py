@@ -1,5 +1,4 @@
 import collections
-import enum
 import sys
 from typing import Generic
 
@@ -26,7 +25,16 @@ from mypy_django_plugin.transformers.managers import (
 )
 from typing_extensions import assert_never
 
-from . import _config, _dependencies, _helpers, _hook, _reports, _store, actions
+from . import (
+    _config,
+    _dependencies,
+    _helpers,
+    _hook,
+    _known_annotations,
+    _reports,
+    _store,
+    actions,
+)
 
 
 class Hook(
@@ -62,10 +70,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     plugin_config: _config.Config
 
-    class Annotations(enum.Enum):
-        CONCRETE = "extended_mypy_django_plugin.annotations.Concrete"
-        CONCRETE_QUERYSET = "extended_mypy_django_plugin.annotations.ConcreteQuerySet"
-        DEFAULT_QUERYSET = "extended_mypy_django_plugin.annotations.DefaultQuerySet"
+    Annotations = _known_annotations.KnownAnnotations
 
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super(main.NewSemanalDjangoPlugin, self).__init__(options)
