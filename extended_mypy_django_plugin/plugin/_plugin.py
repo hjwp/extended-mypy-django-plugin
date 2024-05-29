@@ -1,4 +1,6 @@
+import enum
 import sys
+from collections.abc import Callable
 from typing import Generic
 
 from mypy.checker import TypeChecker
@@ -153,21 +155,33 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             T_Child = TypeVar("T_Child", Child1, Child2, Child3)
         """
 
-        def choose(self) -> bool:
-            class_name, _, method_name = self.fullname.rpartition(".")
-            if method_name == "type_var":
-                info = self.plugin._get_typeinfo_or_none(class_name)
-                if info and info.has_base(ExtendedMypyStubs.Annotations.CONCRETE.value):
-                    return True
+        class KnownConcreteMethods(enum.Enum):
+            type_var = f"{_known_annotations.KnownClasses.CONCRETE.value}.type_var"
+            assert_is_concrete = (
+                f"{_known_annotations.KnownClasses.CONCRETE.value}.assert_is_concrete"
+            )
 
-            return False
+        method_name: KnownConcreteMethods
+
+        def choose(self) -> bool:
+            try:
+                self.method_name = self.KnownConcreteMethods(self.fullname)
+            except ValueError:
+                return False
+            else:
+                return True
 
         def run(self, ctx: DynamicClassDefContext) -> None:
             assert isinstance(ctx.api, SemanticAnalyzer)
 
             sem_analyzing = actions.SemAnalyzing(self.store, api=ctx.api)
 
-            return sem_analyzing.transform_type_var_classmethod(ctx)
+            if self.method_name is self.KnownConcreteMethods.type_var:
+                return sem_analyzing.transform_type_var_classmethod(ctx)
+            elif self.method_name is self.KnownConcreteMethods.assert_is_concrete:
+                return sem_analyzing.transform_assert_is_concrete(ctx)
+            else:
+                assert_never(self.method_name)
 
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
@@ -226,7 +240,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
             )
 
-    class SharedCallableHookLogic:
+    class SharedAnnotationHookLogic:
         """
         Shared logic for modifying the return type of methods and functions that use a concrete
         annotation with a type variable.
@@ -251,7 +265,11 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 return False
 
             sym = self.plugin.lookup_fully_qualified(self.fullname)
-            if not sym or not sym.node:
+            if sym is None:
+                # Probably a method on a class that's referencing that class
+                return True
+
+            if not sym.node:
                 return False
 
             call = getattr(sym.node, "type", None)
@@ -272,16 +290,22 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             return type_checking.modify_return_type(ctx)
 
     class _get_method_or_function_hook(Hook[MethodContext | FunctionContext, MypyType]):
+        runner: Callable[[MethodContext | FunctionContext], MypyType | None]
+
         def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedCallableHookLogic(
+            self.shared_logic = self.plugin.SharedAnnotationHookLogic(
                 fullname=self.fullname, plugin=self.plugin
             )
 
         def choose(self) -> bool:
-            return self.shared_logic.choose()
+            if self.shared_logic.choose():
+                self.runner = self.shared_logic.run
+                return True
+            else:
+                return False
 
         def run(self, ctx: FunctionContext | MethodContext) -> MypyType:
-            result = self.shared_logic.run(ctx)
+            result = self.runner(ctx)
             if result is not None:
                 return result
 
@@ -292,6 +316,30 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     @_hook.hook
     class get_method_hook(_get_method_or_function_hook):
+        # def choose(self) -> bool:
+        #     chosen = super().choose()
+        #     if chosen:
+        #         return chosen
+
+        #     if self.fullname == f"{self.plugin.Annotations.CONCRETE.value}.assert_is_concrete":
+        #         self.runner = self.change_concrete_assertion
+        #         return True
+
+        #     return False
+
+        # def change_concrete_assertion(
+        #     self, ctx: MethodContext | FunctionContext
+        # ) -> MypyType | None:
+        #     assert isinstance(ctx, MethodContext)
+        #     assert isinstance(ctx.api, TypeChecker)
+
+        #     type_checking = actions.TypeChecking(
+        #         self.store,
+        #         api=ctx.api,
+        #         lookup_info=self.plugin._lookup_info,
+        #     )
+
+        #     return type_checking.modify_concrete_assertion(ctx)
         pass
 
     @_hook.hook

@@ -5,7 +5,7 @@ from mypy.types import (
     AnyType,
     Instance,
     TypeOfAny,
-    TypeVarType,
+    TypeType,
     UnboundType,
     UnionType,
     get_proper_type,
@@ -25,12 +25,26 @@ class TypeAnalyzing:
         self.sem_api = sem_api
         self.store = store
 
-    def find_concrete_models(self, unbound_type: UnboundType) -> MypyType:
+    def _analyze_first_type_arg(
+        self, unbound_type: UnboundType
+    ) -> Instance | TypeType | UnionType | None:
         args = unbound_type.args
         type_arg = get_proper_type(self.api.analyze_type(args[0]))
 
-        if not isinstance(type_arg, Instance):
+        if not isinstance(type_arg, Instance | TypeType | UnionType):
+            return None
+
+        return type_arg
+
+    def find_concrete_models(self, unbound_type: UnboundType) -> MypyType:
+        type_arg = self._analyze_first_type_arg(unbound_type)
+        if type_arg is None:
             return unbound_type
+
+        is_type = False
+        if isinstance(type_arg, TypeType):
+            is_type = True
+            type_arg = type_arg.item
 
         concrete = tuple(
             self.store.retrieve_concrete_children_types(
@@ -47,14 +61,16 @@ class TypeAnalyzing:
                 self.sem_api.defer()
                 return unbound_type
 
-        return UnionType(concrete)
+        made = UnionType(concrete)
+        if is_type:
+            return TypeType(made)
+        else:
+            return made
 
     def find_concrete_querysets(self, unbound_type: UnboundType) -> MypyType:
-        args = unbound_type.args
-        type_arg = get_proper_type(self.api.analyze_type(args[0]))
-
-        if not isinstance(type_arg, Instance):
-            return UnionType(())
+        type_arg = self._analyze_first_type_arg(unbound_type)
+        if type_arg is None:
+            return unbound_type
 
         concrete = tuple(
             self.store.retrieve_concrete_children_types(
@@ -77,14 +93,8 @@ class TypeAnalyzing:
             return UnionType(querysets)
 
     def find_default_queryset(self, unbound_type: UnboundType) -> MypyType:
-        args = unbound_type.args
-        type_arg = get_proper_type(self.api.analyze_type(args[0]))
-
-        if isinstance(type_arg, AnyType):
-            self.api.fail("Can't get default query set for Any", unbound_type)
-            return unbound_type
-
-        if isinstance(type_arg, TypeVarType):
+        type_arg = self._analyze_first_type_arg(unbound_type)
+        if type_arg is None:
             return unbound_type
 
         if not isinstance(type_arg, Instance | UnionType):

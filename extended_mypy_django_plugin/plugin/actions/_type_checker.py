@@ -3,7 +3,18 @@ from collections.abc import Iterator, Mapping
 from typing import Protocol
 
 from mypy.checker import TypeChecker
-from mypy.nodes import CallExpr, Context, MemberExpr, TypeInfo
+from mypy.nodes import (
+    CallExpr,
+    Context,
+    Decorator,
+    FuncDef,
+    MemberExpr,
+    MypyFile,
+    NameExpr,
+    SymbolTableNode,
+    TypeInfo,
+    Var,
+)
 from mypy.plugin import AttributeContext, FunctionContext, MethodContext
 from mypy.types import (
     AnyType,
@@ -56,22 +67,32 @@ def _find_type_vars(
             _chain.append(item)
             result.append(item.name)
 
-    return result
+    return [r for r in result if r not in ("typing.Self", "typing_extensions.Self")]
 
 
 @dataclasses.dataclass
 class BasicTypeInfo:
+    is_self: bool
     is_type: bool
     is_guard: bool
     api: TypeChecker
     func: CallableType
+    context: CallExpr
 
     item: ProperType
     type_vars: list[TypeVarType | str]
+    lookup_info: LookupFunction
     concrete_annotation: _known_annotations.KnownAnnotations | None
 
     @classmethod
-    def create(cls, api: TypeChecker, func: CallableType, item: MypyType | None = None) -> Self:
+    def create(
+        cls,
+        api: TypeChecker,
+        func: CallableType,
+        context: CallExpr,
+        lookup_info: LookupFunction,
+        item: MypyType | None = None,
+    ) -> Self:
         is_type: bool = False
         is_guard: bool = False
 
@@ -83,35 +104,150 @@ class BasicTypeInfo:
                 item = func.ret_type
 
         item = get_proper_type(item)
+        original = item
         if isinstance(item, TypeType):
             is_type = True
             item = item.item
 
         type_vars = _find_type_vars(item)
 
-        concrete_annotation: _known_annotations.KnownAnnotations | None = None
-        if isinstance(item, UnboundType):
-            try:
-                named_generic_type_name = api.named_generic_type(
-                    item.name, list(item.args)
-                ).type.fullname
-            except AssertionError:
-                named_generic_type_name = ""
-
-            try:
-                concrete_annotation = _known_annotations.KnownAnnotations(named_generic_type_name)
-            except ValueError:
-                pass
+        is_self, concrete_annotation = cls._determine_if_concrete(
+            api, context, lookup_info, original
+        )
 
         return cls(
             api=api,
             func=func,
             item=item,
+            context=context,
+            is_self=is_self,
             is_type=is_type,
             is_guard=is_guard,
             type_vars=type_vars,
+            lookup_info=lookup_info,
             concrete_annotation=concrete_annotation,
         )
+
+    @classmethod
+    def _determine_if_concrete(
+        cls, api: TypeChecker, context: CallExpr, lookup_info: LookupFunction, item: ProperType
+    ) -> tuple[bool, _known_annotations.KnownAnnotations | None]:
+        def _resolve_in_module(
+            names: Mapping[str, SymbolTableNode], want: str
+        ) -> SymbolTableNode | None:
+            if "." not in want:
+                return names.get(want)
+            else:
+                first, rest = want.split(".", 1)
+                found = names.get(first)
+                if found is None or not isinstance(found.node, MypyFile):
+                    return None
+
+                return _resolve_in_module(found.node.names, rest)
+
+        def _find_name_where_defined(cls: TypeInfo, method_name: str) -> tuple[bool, str] | None:
+            method = cls.names.get(method_name)
+            if method is None:
+                for base in cls.direct_base_classes():
+                    if ret := _find_name_where_defined(base, method_name):
+                        return ret
+
+                return None
+
+            func = method.node
+            if isinstance(func, Decorator):
+                func = func.func
+            elif not isinstance(func, FuncDef):
+                return None
+
+            module = api.modules.get(func.info.module_name)
+            if module is None:
+                return None
+
+            if not isinstance(func.type, CallableType):
+                return None
+
+            ret_type = func.type.ret_type
+            if not isinstance(ret_type, UnboundType):
+                return None
+
+            resolved = _resolve_in_module(module.names, ret_type.name)
+            if resolved is None or not resolved.fullname:
+                return None
+
+            is_self: bool = False
+            named_type_name = resolved.fullname
+
+            for arg in ret_type.args:
+                if isinstance(arg, UnboundType):
+                    resolved = _resolve_in_module(module.names, arg.name)
+                    if resolved is None or not resolved.fullname:
+                        api.fail(
+                            f"Failed to resolve argument for {func.info.fullname}: {arg}", context
+                        )
+                        return None
+
+                    if resolved.fullname in ("typing_extensions.Self", "typing.Self"):
+                        is_self = True
+                        break
+
+            return is_self, named_type_name
+
+        def _find_where_defined() -> tuple[bool, str]:
+            if not isinstance(context.callee, MemberExpr):
+                return False, ""
+
+            if not isinstance(context.callee.expr, NameExpr):
+                return False, ""
+
+            if context.callee.expr.node is None:
+                return False, ""
+
+            method_name = context.callee.name
+
+            cls: TypeInfo | None = None
+            node = context.callee.expr.node
+            if isinstance(node, TypeInfo):
+                cls = node
+            elif isinstance(node, Var) and isinstance(
+                node_type := get_proper_type(node.type), Instance | TypeType
+            ):
+                if isinstance(node_type, TypeType):
+                    if not isinstance(node_type.item, Instance):
+                        return False, ""
+                    cls = node_type.item.type
+                else:
+                    cls = node_type.type
+
+            if cls is None:
+                return False, ""
+
+            result = _find_name_where_defined(cls, method_name)
+            if result is None:
+                return False, ""
+
+            return result
+
+        is_self: bool = False
+        named_type_name: str = ""
+        if isinstance(item, UnboundType):
+            try:
+                found = api.lookup(item.name)
+                if found is None or not isinstance(found.node, TypeInfo):
+                    named_type_name = ""
+                else:
+                    named_type_name = found.node.fullname
+            except KeyError:
+                is_self, named_type_name = _find_where_defined()
+
+        concrete_annotation: _known_annotations.KnownAnnotations | None = None
+        if named_type_name:
+            try:
+                concrete_annotation = _known_annotations.KnownAnnotations(named_type_name)
+            except ValueError:
+                pass
+
+        return is_self, concrete_annotation
 
     @property
     def contains_concrete_annotation(self) -> bool:
@@ -127,12 +263,21 @@ class BasicTypeInfo:
     def items(self) -> Iterator[Self]:
         if isinstance(self.item, UnionType):
             for item in self.item.items:
-                yield self.__class__.create(self.api, self.func, item)
+                yield self.__class__.create(
+                    api=self.api,
+                    func=self.func,
+                    context=self.context,
+                    item=item,
+                    lookup_info=self.lookup_info,
+                )
         else:
             yield self
 
     def map_type_vars(
-        self, context: Context, callee_arg_names: list[str | None], arg_types: list[list[MypyType]]
+        self,
+        context: Context,
+        callee_arg_names: list[str | None],
+        arg_types: list[list[MypyType]],
     ) -> Mapping[TypeVarType | str, ProperType]:
         result: dict[TypeVarType | str, ProperType] = {}
 
@@ -150,6 +295,20 @@ class BasicTypeInfo:
 
                 result[underlying] = found_type
                 result[underlying.name] = found_type
+
+        if self.func.bound_args:
+            bound_args = self.func.bound_args
+            if len(bound_args) > 0 and bound_args[0]:
+                bound_arg = get_proper_type(bound_args[0])
+                if isinstance(bound_arg, TypeType):
+                    bound_arg = bound_arg.item
+
+                if "typing_extensions.Self" not in result:
+                    result["typing_extensions.Self"] = bound_arg
+                if "typing.Self" not in result:
+                    result["typing.Self"] = bound_arg
+                if "Self" not in result:
+                    result["Self"] = bound_arg
 
         for type_var in self.type_vars:
             if type_var not in result:
@@ -194,7 +353,9 @@ class TypeChecking:
         if not isinstance(func, CallableType):
             return None
 
-        return BasicTypeInfo.create(api=self.api, func=func)
+        return BasicTypeInfo.create(
+            api=self.api, context=context, func=func, lookup_info=self._lookup_info
+        )
 
     def check_typeguard(self, context: Context) -> MypyType | None:
         info = self._get_info(context)

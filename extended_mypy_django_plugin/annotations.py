@@ -5,7 +5,8 @@ from typing import Generic, TypeVar
 
 from django.db import models
 
-T_Parent = TypeVar("T_Parent", bound=models.Model)
+T = TypeVar("T")
+T_Parent = TypeVar("T_Parent")
 
 
 class Concrete(Generic[T_Parent]):
@@ -23,7 +24,41 @@ class Concrete(Generic[T_Parent]):
 
     .. automethod:: find_children
     .. automethod:: type_var
+    .. automethod:: assert_is_concrete
     """
+
+    @staticmethod
+    def assert_is_concrete(obj: object) -> None:
+        """
+        Assert that an object is not abstract.
+
+        Note a cast can't be done automatically::
+
+            from typing import Self, cast
+
+            from extended_mypy_django_plugin import Concrete
+
+            class MyModel(Model):
+                class Meta:
+                    abstract = True
+
+                @classmethod
+                def new(cls) -> Concrete[Self]:
+                    Concrete.assert_not_abstract(cls)
+                    cls = cast(Concrete[Self], cls)
+                    ...
+
+                def get_self(self) -> Concrete[Self]:
+                    ...
+        """
+        if isinstance(obj, type):
+            if not issubclass(obj, models.Model) or (
+                (Meta := getattr(obj, "Meta", None)) and getattr(Meta, "abstract", False)
+            ):
+                raise RuntimeError("Expected a concrete subclass")
+
+        elif not isinstance(obj, models.Model) or obj._meta.abstract:
+            raise RuntimeError("Expected a concrete instance")
 
     @classmethod
     def find_children(cls, parent: type[models.Model]) -> Sequence[type[models.Model]]:

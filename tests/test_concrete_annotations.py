@@ -497,3 +497,144 @@ class TestConcreteAnnotations:
                     "Cannot resolve keyword 'nup' into field. Choices are: from_follower1, good, id",
                 )
             )
+
+    def test_can_create_concrete_classmethods(self, scenario: Scenario) -> None:
+        @scenario.run_and_check_mypy_after(installed_apps=["example"], expect_fail=True)
+        def _(expected: OutputBuilder) -> None:
+            scenario.make_file("example/__init__.py", "")
+
+            scenario.make_file(
+                "example/apps.py",
+                """
+                from django.apps import AppConfig
+
+                class Config(AppConfig):
+                    name = "example"
+                """,
+            )
+
+            scenario.make_file(
+                "example/models.py",
+                """
+                from __future__ import annotations
+
+                from django.db import models
+                from typing import TypeVar, cast, Any
+                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet
+                from typing_extensions import Self
+                import typing_extensions
+                import extended_mypy_django_plugin
+
+                class Leader(models.Model):
+                    one = models.IntegerField()
+
+                    class Meta:
+                        abstract = True
+
+                    @classmethod
+                    def new(cls, one: int) -> extended_mypy_django_plugin.Concrete[Self]:
+                        cls = Concrete.assert_is_concrete(cls)
+                        reveal_type(cls)
+                        return cls.objects.create(one=one)
+
+                    @classmethod
+                    def qs(cls, one:int|None=None) -> ConcreteQuerySet[Self]:
+                        cls = Concrete.assert_is_concrete(cls)
+                        qs= cls.objects.all()
+                        reveal_type(qs)
+                        return qs
+
+                    def return_self(self) -> Concrete[Self]:
+                        return self
+
+
+                T_Leader = Concrete.type_var("T_Leader", Leader)
+
+                class Follower1(Leader):
+                    def get_one(self) -> int:
+                        return self.one
+
+                    @classmethod
+                    def new(cls, one:int|None=None) -> Concrete[Self]:
+                        return super().new(one=one or 20)
+
+                class Follower2(Leader):
+                    two = models.IntegerField()
+
+                    def get_two(self) -> int:
+                        return self.two
+
+                    @classmethod
+                    def new(cls, one: int, two:int=1) -> Concrete[Self]:
+                        cls = Concrete.assert_is_concrete(cls)
+                        reveal_type(cls)
+                        return cls.objects.create(one=one, two=two)
+                """,
+            )
+
+            scenario.make_file(
+                "example/operations.py",
+                """
+                from .models import Follower1, Follower2, Leader
+                from extended_mypy_django_plugin import Concrete
+
+                def store_and_get_one(one: int) -> int:
+                    model: type[Leader] = Follower1
+                    from_leader = model.new(one=one)
+                    reveal_type(from_leader)
+                    reveal_type(from_leader)
+                    follower = Follower1.new(one=one)
+                    reveal_type(follower)
+                    reveal_type(follower.return_self())
+                    return follower.get_one()
+                """,
+            )
+
+            scenario.make_file(
+                "main.py",
+                """
+                from example.operations import store_and_get_one
+
+                store_and_get_one(one=2)
+                """,
+            )
+
+        # Let's then add a new app with new models
+
+        @scenario.run_and_check_mypy_after(installed_apps=["example", "follower"])
+        def _(expected: OutputBuilder) -> None:
+            scenario.update_file("follower/__init__.py", "")
+
+            scenario.update_file(
+                "follower/apps.py",
+                """
+                from django.apps import AppConfig
+                class Config(AppConfig):
+                    name = "follower"
+                """,
+            )
+
+            scenario.update_file(
+                "follower/models.py",
+                """
+                from django.db import models
+                from extended_mypy_django_plugin import Concrete
+                from example.models import Leader
+                from typing import cast, TYPE_CHECKING
+
+                class FollowerQuerySet(models.QuerySet["Follower"]):
+                    def good_ones(self) -> "FollowerQuerySet":
+                        return self.filter(good=True)
+
+                FollowerManager = models.Manager.from_queryset(FollowerQuerySet)
+
+                class Follower(Leader):
+                    good = models.BooleanField()
+
+                    objects = FollowerManager()
+
+                if TYPE_CHECKING:
+                    ms: Concrete[Leader] = cast(Follower, None)
+                    reveal_type(ms)
+                """,
+            )

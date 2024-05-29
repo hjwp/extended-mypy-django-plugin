@@ -1,6 +1,10 @@
 import pytest
 from pytest_mypy_plugins import MypyPluginsConfig, MypyPluginsScenario
 
+from extended_mypy_django_plugin.plugin._debug import debug
+
+__builtins__["debug"] = debug
+
 from .scenario import Scenario
 
 
