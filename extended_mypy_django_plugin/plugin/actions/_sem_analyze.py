@@ -9,11 +9,7 @@ from mypy.plugin import (
     DynamicClassDefContext,
 )
 from mypy.semanal import SemanticAnalyzer
-from mypy.types import (
-    AnyType,
-    TypeOfAny,
-    TypeVarType,
-)
+from mypy.types import AnyType, TypeOfAny, TypeVarType
 
 from .. import _store
 
@@ -63,9 +59,10 @@ class SemAnalyzing:
             return
 
         object_type = self.api.named_type("builtins.object")
-        values = self.store.retrieve_concrete_children_types(
-            parent.node, self.lookup_info, self.api.named_type_or_none
+        values = self.store.retrieve_concrete_children(
+            parent.node, self.api.named_type, ctx.call.line
         )
+
         if not values:
             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
 

@@ -32,11 +32,10 @@ class TypeAnalyzing:
         if not isinstance(type_arg, Instance):
             return unbound_type
 
-        concrete = tuple(
-            self.store.retrieve_concrete_children_types(
-                type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
-            )
+        concrete = self.store.retrieve_concrete_children(
+            type_arg.type, self.api.named_type, unbound_type.line
         )
+
         if not concrete:
             if self.sem_api.final_iteration:
                 self.api.fail(
@@ -56,11 +55,10 @@ class TypeAnalyzing:
         if not isinstance(type_arg, Instance):
             return UnionType(())
 
-        concrete = tuple(
-            self.store.retrieve_concrete_children_types(
-                type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
-            )
+        concrete = self.store.retrieve_concrete_children(
+            type_arg.type, self.api.named_type, unbound_type.line
         )
+
         if not concrete:
             self.api.fail(f"No concrete models found for {type_arg.type.fullname}", unbound_type)
             return AnyType(TypeOfAny.from_error)

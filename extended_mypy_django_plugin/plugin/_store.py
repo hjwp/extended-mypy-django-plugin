@@ -1,11 +1,10 @@
 import importlib.metadata
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from typing import Protocol
 
 from django.db import models
 from mypy.nodes import TypeInfo
-from mypy.types import Instance, UnionType, get_proper_type
-from mypy.types import Type as MypyType
+from mypy.types import Instance, PlaceholderType, UnionType, get_proper_type
 
 from ._reports import ModelModules
 
@@ -37,11 +36,15 @@ class GetModelClassByFullname(Protocol):
 
 
 class IsInstalledModel(Protocol):
-    def __call__(self, instance: Instance) -> bool: ...
+    def __call__(self, fullname: str, concrete_required: bool = False) -> bool: ...
 
 
 class KnownConcreteModelsGetter(Protocol):
     def __call__(self, fullname: str) -> set[str]: ...
+
+
+class NamedTypeGetter(Protocol):
+    def __call__(self, fullname: str, /) -> Instance: ...
 
 
 class Store:
@@ -50,7 +53,7 @@ class Store:
     the available concrete models and queryset objects when resolving the annotations
     this plugin provides.
 
-    .. automethod:: retrieve_concrete_children_types
+    .. automethod:: retrieve_concrete_children
 
     .. automethod:: realise_querysets
     """
@@ -68,29 +71,37 @@ class Store:
         self._django_context_model_modules = django_context_model_modules
         self._is_installed_model = is_installed_model
         self._known_concrete_models = known_concrete_models
+        self._concrete_cache: dict[str, tuple[Instance | PlaceholderType, ...]] = {}
         self.model_modules = self._determine_model_modules()
 
-    def retrieve_concrete_children_types(
-        self,
-        parent: TypeInfo,
-        lookup_info: LookupFunction,
-        lookup_instance: LookupInstanceFunction,
-    ) -> Sequence[MypyType]:
-        """
-        Given a ``TypeInfo`` representing some model, return ``MypyType`` objects
-        for all the concrete children related to the specified model.
-        """
-        values: list[MypyType] = []
+    def retrieve_concrete_children(
+        self, parent: TypeInfo, named_type: NamedTypeGetter, placeholder_line: int
+    ) -> tuple[Instance | PlaceholderType, ...]:
+        if parent.fullname not in self._concrete_cache:
+            fullnames = sorted(
+                [
+                    fullname
+                    for fullname in self._known_concrete_models(parent.fullname)
+                    if self._is_installed_model(fullname, concrete_required=True)
+                ]
+            )
 
-        concrete_type_infos = self._retrieve_concrete_children_info_from_metadata(
-            parent, lookup_info
-        )
-        for info in concrete_type_infos:
-            instance = lookup_instance(info.fullname)
-            if instance and self._is_installed_model(instance):
-                values.append(instance)
+            result: list[Instance | PlaceholderType] = []
+            has_placeholder: bool = False
 
-        return values
+            for fullname in fullnames:
+                if not self._plugin_lookup_info(fullname):
+                    has_placeholder = True
+                    result.append(PlaceholderType(fullname, [], placeholder_line))
+                else:
+                    result.append(named_type(fullname))
+
+            if has_placeholder:
+                return tuple(result)
+
+            self._concrete_cache[parent.fullname] = tuple(result)
+
+        return self._concrete_cache[parent.fullname]
 
     def realise_querysets(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction
@@ -128,34 +139,6 @@ class Store:
                     if isinstance(cls, type) and issubclass(cls, models.Model)
                 }
         return result
-
-    def _retrieve_concrete_children_info_from_metadata(
-        self, parent: TypeInfo, lookup_info: LookupFunction
-    ) -> Sequence[TypeInfo]:
-        """
-        For the children recorded in the metadata for this model, return those
-        that aren't abstract
-        """
-        children = sorted(self._known_concrete_models(parent.fullname))
-
-        ret: list[TypeInfo] = []
-        for child in children:
-            info = lookup_info(child)
-            if not info:
-                continue
-
-            abstract: bool = False
-            if "django" not in info.metadata:
-                # Old versions of mypy/django-stubs don't have metadata at this point
-                model_cls = self._get_model_class_by_fullname(info.fullname)
-                abstract = bool(model_cls and model_cls._meta.abstract)
-            else:
-                abstract = info.metadata.get("django", {}).get("is_abstract_model", False)
-
-            if not abstract:
-                ret.append(info)
-
-        return ret
 
     def _get_queryset_fullnames(
         self, type_var: Instance | UnionType, lookup_info: LookupFunction

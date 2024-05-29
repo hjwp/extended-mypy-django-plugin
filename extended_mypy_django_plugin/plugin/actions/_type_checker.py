@@ -1,5 +1,6 @@
 import dataclasses
 from collections.abc import Iterator, Mapping
+from itertools import chain
 from typing import Protocol
 
 from mypy.checker import TypeChecker
@@ -162,22 +163,9 @@ class BasicTypeInfo:
 
 
 class TypeChecking:
-    def __init__(
-        self, store: _store.Store, *, api: TypeChecker, lookup_info: LookupFunction
-    ) -> None:
+    def __init__(self, store: _store.Store, *, api: TypeChecker) -> None:
         self.api = api
         self.store = store
-        self._lookup_info = lookup_info
-
-    def _named_type(self, fullname: str, args: list[MypyType] | None = None) -> Instance:
-        """
-        Copied from what semantic analyzer does
-        """
-        node = self._lookup_info(fullname)
-        assert isinstance(node, TypeInfo)
-        if args:
-            return Instance(node, args)
-        return Instance(node, [AnyType(TypeOfAny.special_form)] * len(node.defn.type_vars))
 
     def _get_info(self, context: Context) -> BasicTypeInfo | None:
         if not isinstance(context, CallExpr):
@@ -336,14 +324,18 @@ class TypeChecking:
             return UnionType(querysets)
 
     def get_concrete_types(self, context: Context, *, instances: list[Instance]) -> UnionType:
-        result: list[MypyType] = []
-        for item in instances:
-            result.extend(
-                self.store.retrieve_concrete_children_types(
-                    item.type, self.lookup_info, self._named_type
+        return UnionType(
+            tuple(
+                chain.from_iterable(
+                    [
+                        self.store.retrieve_concrete_children(
+                            item.type, self.api.named_type, context.line
+                        )
+                        for item in instances
+                    ]
                 )
             )
-        return UnionType(tuple(result))
+        )
 
     def extended_get_attribute_resolve_manager_method(
         self,

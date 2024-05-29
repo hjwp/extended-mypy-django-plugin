@@ -18,11 +18,14 @@ class Dependencies:
         self._model_modules = model_modules
         self._report_names_getter = report_names_getter
 
-    def is_model_known(self, fullname: str) -> bool:
+    def is_model_known(self, fullname: str, concrete_required: bool = False) -> bool:
         for mod, known in self._model_modules.items():
             for cls in known.values():
                 if fullname == f"{cls.__module__}.{cls.__qualname__}":
-                    return True
+                    if concrete_required:
+                        return not cls._meta.abstract
+                    else:
+                        return True
 
         return False
 

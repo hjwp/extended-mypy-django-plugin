@@ -16,7 +16,7 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType, FunctionLike, Instance
+from mypy.types import CallableType, FunctionLike
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -102,8 +102,8 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             ),
         )
 
-    def _is_installed_model(self, instance: Instance) -> bool:
-        return self.dependencies.is_model_known(instance.type.fullname)
+    def _is_installed_model(self, fullname: str, concrete_required: bool = False) -> bool:
+        return self.dependencies.is_model_known(fullname, concrete_required=concrete_required)
 
     def _lookup_info(self, fullname: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(fullname)
@@ -218,9 +218,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: AttributeContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.extended_get_attribute_resolve_manager_method(
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
@@ -263,11 +261,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.modify_return_type(ctx)
 
@@ -334,11 +328,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.check_typeguard(ctx.context)
 
