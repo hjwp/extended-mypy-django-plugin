@@ -1,4 +1,9 @@
+from typing import TYPE_CHECKING
+
 from django.db import models
+from typing_extensions import Self
+
+from extended_mypy_django_plugin import Concrete
 
 
 class Parent(models.Model):
@@ -6,6 +11,10 @@ class Parent(models.Model):
 
     class Meta:
         abstract = True
+
+    @classmethod
+    def new(cls) -> Concrete[Self]:
+        return cls  # type: ignore[return-value]
 
 
 class Child1(Parent):
@@ -54,3 +63,13 @@ class Child4(Parent2):
     three = models.CharField(max_length=70)
 
     objects = Child4Manager()
+
+
+class Child5(Parent):
+    two = models.CharField(max_length=60)
+
+    three = models.CharField(max_length=70)
+
+
+if TYPE_CHECKING:
+    reveal_type(Child5.new())

@@ -93,21 +93,53 @@ class _Store:
 
         return cls(prefix=prefix, modules=modules, reports_dir=reports_dir).write(modules)
 
+    def _concrete_annotations_for(self, mod: str, empty: bool) -> str:
+        annotations: list[str] = []
+
+        if mod == "djangoexample.exampleapp.models":
+            annotations.extend(
+                [
+                    "from typing import TYPE_CHECKING, TypeAlias",
+                    "if TYPE_CHECKING:",
+                    "    from djangoexample.exampleapp.models import Child1, Child2, Child3, Child4, Child5",
+                    "    from djangoexample.exampleapp2.models import ChildOther, ChildOther2",
+                    "Concrete__Parent: TypeAlias = Child1 | Child2 | Child3 | Child4 | Child5 | ChildOther | ChildOther2",
+                    "Concrete__Parent2: TypeAlias = Child3 | Child4",
+                ]
+            )
+
+        if not annotations:
+            return ""
+
+        return "\n\n" + "\n".join(annotations)
+
     def _write_mod(
         self, directory: pathlib.Path, mod: str, summary: str, empty: bool = False
     ) -> str:
         name = f"mod_{zlib.adler32(mod.encode())}"
         self.modules_to_report_name[mod] = f"{self.prefix}.{name}"
 
+        concrete_annotations = self._concrete_annotations_for(mod, empty=empty)
+
+        # And a version directive for the version of the content
+        summary = f"1.{summary}"
+
         # For mypy to trigger this dependency as stale it's interface must change
         # So we produce a different function each time using the current time
-        content = textwrap.dedent(f"""
+        content = (
+            textwrap.dedent(
+                f"""
+        from __future__ import annotations
+
         def value_{'not_installed' if empty else str(time.time()).replace('.', '__')}() -> str:
             return ""
 
         mod = "{mod}"
         summary = "{summary}"
-        """)
+        """
+            )
+            + concrete_annotations
+        )
 
         destination = self.reports_dir / f"{name}.py"
         previous_summary: str | None = None

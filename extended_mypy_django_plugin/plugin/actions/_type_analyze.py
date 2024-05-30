@@ -32,6 +32,31 @@ class TypeAnalyzing:
         if not isinstance(type_arg, Instance):
             return unbound_type
 
+        if type_arg.type.fullname == "djangoexample.exampleapp.models.Parent":
+            from mypy.nodes import ImportFrom, TypeAlias
+
+            found = self.api.lookup_qualified("__virtual_Concrete__Parent", unbound_type)
+            if found is None:
+                imp = ImportFrom(
+                    "__virtual_extended_mypy_django_plugin_report__.mod_3347844205",
+                    0,
+                    [("Concrete__Parent", "__virtual_Concrete__Parent")],
+                )
+                imp.line = unbound_type.line
+                imp.column = unbound_type.column
+                imp.is_mypy_only = True
+                imp.accept(self.sem_api)
+
+            name = "__virtual_Concrete__Parent"
+            found = self.sem_api.lookup_qualified(name, unbound_type)
+            if found is None:
+                return unbound_type
+
+            if isinstance(found.node, TypeAlias):
+                return found.node.target
+            else:
+                return found.node
+
         concrete = tuple(
             self.store.retrieve_concrete_children_types(
                 type_arg.type, self.lookup_info, self.sem_api.named_type_or_none
