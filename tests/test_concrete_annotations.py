@@ -118,6 +118,8 @@ class TestConcreteAnnotations:
                     class Meta:
                         abstract = True
 
+                T_Leader = Concrete.type_var("T_Leader", Leader)
+
                 class Follower1QuerySet(models.QuerySet["Follower1"]):
                     ...
 
@@ -128,22 +130,40 @@ class TestConcreteAnnotations:
 
                 class Follower2(Leader):
                     ...
+
+                def make_queryset(cls: T_Leader) -> DefaultQuerySet[T_Leader]:
+                    return None # type: ignore[return-value]
                 """,
             )
 
             scenario.make_file_with_reveals(
                 expected,
-                2,
+                4,
                 "main.py",
                 """
-                from example.models import Leader
+                from example.models import Leader, Follower1, make_queryset
+                from typing import cast
 
                 leader = Leader.new()
                 # ^ REVEAL leader ^ Union[example.models.Follower1, example.models.Follower2]
 
                 qs = leader.qs()
                 # ^ REVEAL qs ^ Union[example.models.Follower1QuerySet, django.db.models.query.QuerySet[example.models.Follower2, example.models.Follower2]]
+
+                follower1 = Follower1.objects.create()
+                # ^ REVEAL follower1 ^ example.models.Follower1
+
+                qs2 = make_queryset(cast(Follower1, None))
+                # ^ REVEAL qs2 ^ extended_mypy_django_plugin.annotations.DefaultQuerySet[example.models.Follower1]
+                # TODO: make sure the default queryset is expanded again
                 """,
+            )
+
+            # Fixed in a future commit
+            (
+                expected.on("example/models.py").add_error(
+                    17, "misc", "No concrete children found for example.models.Leader"
+                )
             )
 
     def test_sees_apps_removed_when_they_still_exist_but_no_longer_installed(

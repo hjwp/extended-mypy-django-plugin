@@ -18,7 +18,7 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType, FunctionLike, Instance
+from mypy.types import CallableType, FunctionLike, Instance, TypeType, UnboundType, get_proper_type
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -227,9 +227,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: AttributeContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.extended_get_attribute_resolve_manager_method(
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
@@ -267,16 +265,33 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             if not isinstance(call, CallableType):
                 return False
 
-            return bool(call.type_guard or call.is_generic())
+            ret_type = call.ret_type
+            if call.type_guard:
+                ret_type = call.type_guard
+
+            ret_type = get_proper_type(ret_type)
+            if isinstance(ret_type, TypeType):
+                ret_type = ret_type.item
+
+            if isinstance(ret_type, UnboundType):
+                return ret_type.name in [
+                    known.value.rpartition(".")[-1]
+                    for known in _known_annotations.KnownAnnotations
+                ]
+            elif isinstance(ret_type, Instance):
+                try:
+                    _known_annotations.KnownAnnotations(ret_type.type.fullname)
+                except ValueError:
+                    return False
+                else:
+                    return True
+            else:
+                return False
 
         def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.modify_return_type(ctx)
 
@@ -344,18 +359,30 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             if not isinstance(call, CallableType):
                 return False
 
-            return call.type_guard is not None
+            ret_type = call.ret_type
+            if call.type_guard:
+                ret_type = call.type_guard
+
+            ret_type = get_proper_type(ret_type)
+
+            if isinstance(ret_type, TypeType):
+                ret_type = ret_type.item
+
+            if not isinstance(ret_type, UnboundType):
+                return False
+
+            return ret_type.name in [
+                known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
+            ]
 
         def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
-            return type_checking.check_typeguard(ctx.context)
+            return type_checking.check_typeguard(
+                ctx.context, is_function=isinstance(ctx, FunctionSigContext)
+            )
 
     class _get_method_or_function_signature_hook(
         Hook[MethodSigContext | FunctionSigContext, FunctionLike]
