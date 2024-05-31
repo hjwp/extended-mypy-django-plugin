@@ -98,16 +98,17 @@ class TypeAnalyzing:
     def _make_union(
         self, is_type: bool, instances: Sequence[Instance]
     ) -> UnionType | Instance | TypeType:
-        made: UnionType | TypeType | Instance
-        if len(instances) == 1:
-            made = instances[0]
-        else:
-            made = UnionType(instances)
+        items: Sequence[UnionType | TypeType | Instance]
 
         if is_type:
-            return TypeType(made)
+            items = [item if isinstance(item, TypeType) else TypeType(item) for item in instances]
         else:
-            return made
+            items = instances
+
+        if len(items) == 1:
+            return items[0]
+        else:
+            return UnionType(tuple(items))
 
     def find_concrete_models(self, unbound_type: UnboundType) -> MypyType:
         is_type, concrete = self._analyze_first_type_arg(unbound_type)

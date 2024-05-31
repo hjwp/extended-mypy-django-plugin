@@ -84,10 +84,10 @@ class TestConcreteAnnotations:
                 # ^ REVEAL t1_child2_qs2 ^ type[myapp.models.Child2QuerySet]
 
                 t2_children: Concrete[type[Parent]]
-                # ^ REVEAL t2_children ^ type[Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]]
+                # ^ REVEAL t2_children ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
 
                 t2_children_qs1: ConcreteQuerySet[type[Parent]]
-                # ^ REVEAL t2_children_qs1 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
+                # ^ REVEAL t2_children_qs1 ^ Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
 
                 t2_children_qs2: DefaultQuerySet[type[Parent]]
                 # ^ REVEAL t2_children_qs2 ^ type[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]
