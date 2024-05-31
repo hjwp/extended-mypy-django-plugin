@@ -95,8 +95,15 @@ class TypeAnalyzing:
 
         return is_type, tuple(concrete)
 
-    def _make_union(self, is_type: bool, instances: Sequence[Instance]) -> UnionType | TypeType:
-        made = UnionType(instances)
+    def _make_union(
+        self, is_type: bool, instances: Sequence[Instance]
+    ) -> UnionType | Instance | TypeType:
+        made: UnionType | TypeType | Instance
+        if len(instances) == 1:
+            made = instances[0]
+        else:
+            made = UnionType(instances)
+
         if is_type:
             return TypeType(made)
         else:

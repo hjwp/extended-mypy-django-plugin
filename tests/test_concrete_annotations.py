@@ -42,22 +42,22 @@ class TestConcreteAnnotations:
                 # ^ REVEAL children_qs1 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]
 
                 children_qs2: DefaultQuerySet[Parent]
-                # ^ REVEAL children_qs2 ^ Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]
+                # ^ REVEAL children_qs2 ^ django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]
 
                 child: Concrete[Child1]
-                # ^ REVEAL child ^ Union[myapp.models.Child1]
+                # ^ REVEAL child ^ myapp.models.Child1
 
                 child1_qs1: ConcreteQuerySet[Child1]
-                # ^ REVEAL child1_qs1 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
+                # ^ REVEAL child1_qs1 ^ django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]
 
                 child1_qs2: DefaultQuerySet[Child1]
-                # ^ REVEAL child1_qs2 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
+                # ^ REVEAL child1_qs2 ^ django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]
 
                 child2_qs1: ConcreteQuerySet[Child2]
-                # ^ REVEAL child2_qs1 ^ Union[myapp.models.Child2QuerySet]
+                # ^ REVEAL child2_qs1 ^ myapp.models.Child2QuerySet
 
                 child2_qs2: DefaultQuerySet[Child2]
-                # ^ REVEAL child2_qs2 ^ Union[myapp.models.Child2QuerySet]
+                # ^ REVEAL child2_qs2 ^ myapp.models.Child2QuerySet
 
                 t1_children: type[Concrete[Parent]]
                 # ^ REVEAL t1_children ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
@@ -90,22 +90,22 @@ class TestConcreteAnnotations:
                 # ^ REVEAL t2_children_qs1 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
 
                 t2_children_qs2: DefaultQuerySet[type[Parent]]
-                # ^ REVEAL t2_children_qs2 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]]
+                # ^ REVEAL t2_children_qs2 ^ type[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]
 
                 t2_child: Concrete[type[Child1]]
-                # ^ REVEAL t2_child ^ type[Union[myapp.models.Child1]]
+                # ^ REVEAL t2_child ^ type[myapp.models.Child1]
 
                 t2_child1_qs1: ConcreteQuerySet[type[Child1]]
-                # ^ REVEAL t2_child1_qs1 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]
+                # ^ REVEAL t2_child1_qs1 ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 t2_child1_qs2: DefaultQuerySet[type[Child1]]
-                # ^ REVEAL t2_child1_qs2 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]
+                # ^ REVEAL t2_child1_qs2 ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 t2_child2_qs1: ConcreteQuerySet[type[Child2]]
-                # ^ REVEAL t2_child2_qs1 ^ type[Union[myapp.models.Child2QuerySet]]
+                # ^ REVEAL t2_child2_qs1 ^ type[myapp.models.Child2QuerySet]
 
                 t2_child2_qs2: DefaultQuerySet[type[Child2]]
-                # ^ REVEAL t2_child2_qs2 ^ type[Union[myapp.models.Child2QuerySet]]
+                # ^ REVEAL t2_child2_qs2 ^ type[myapp.models.Child2QuerySet]
                 """,
             )
 
@@ -319,8 +319,8 @@ class TestConcreteAnnotations:
 
             (
                 expected.on("main.py")
-                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
-                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_revealed_type(6, "follower1.models.follower1.Follower1")
+                .add_revealed_type(9, "follower1.models.follower1.Follower1QuerySet")
                 .add_error(
                     10,
                     "misc",
@@ -449,8 +449,8 @@ class TestConcreteAnnotations:
 
             (
                 expected.on("main.py")
-                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
-                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_revealed_type(6, "follower1.models.follower1.Follower1")
+                .add_revealed_type(9, "follower1.models.follower1.Follower1QuerySet")
                 .add_error(
                     10,
                     "misc",
