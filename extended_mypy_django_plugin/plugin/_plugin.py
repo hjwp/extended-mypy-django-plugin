@@ -18,7 +18,7 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType, FunctionLike, Instance
+from mypy.types import FunctionLike, Instance
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -62,8 +62,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
     plugin_config: _config.Config
 
-    Annotations = _known_annotations.KnownAnnotations
-
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super(main.NewSemanalDjangoPlugin, self).__init__(options)
         self.mypy_version_tuple = mypy_version_tuple
@@ -89,6 +87,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
+            lookup_fully_qualified=self.lookup_fully_qualified,
             django_context_model_modules=self.django_context.model_modules,
             is_installed_model=self._is_installed_model,
             known_concrete_models=self.report.known_concrete_models,
@@ -188,31 +187,22 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         Resolve classes annotated with ``Concrete`` or ``DefaultQuerySet``.
         """
 
+        annotation: _known_annotations.KnownAnnotations
+
         def choose(self) -> bool:
-            return any(
-                member.value == self.fullname
-                for member in ExtendedMypyStubs.Annotations.__members__.values()
-            )
+            try:
+                self.annotation = _known_annotations.KnownAnnotations(self.fullname)
+            except ValueError:
+                return False
+            else:
+                return True
 
         def run(self, ctx: AnalyzeTypeContext) -> MypyType:
             assert isinstance(ctx.api, TypeAnalyser)
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
-            Known = ExtendedMypyStubs.Annotations
-            name = Known(self.fullname)
-
-            type_analyzer = actions.TypeAnalyzing(self.store, api=ctx.api, sem_api=ctx.api.api)
-
-            if name is Known.CONCRETE:
-                method = type_analyzer.find_concrete_models
-
-            elif name is Known.DEFAULT_QUERYSET:
-                method = type_analyzer.find_default_queryset
-
-            else:
-                assert_never(name)
-
-            return method(unbound_type=ctx.type)
+            type_analyzer = actions.TypeAnalyzer(self.store, ctx.api, ctx.api.api)
+            return type_analyzer.analyze(ctx, self.annotation)
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
@@ -227,65 +217,19 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         def run(self, ctx: AttributeContext) -> MypyType:
             assert isinstance(ctx.api, TypeChecker)
 
-            type_checking = actions.TypeChecking(
-                self.store, api=ctx.api, lookup_info=self.plugin._lookup_info
-            )
+            type_checking = actions.TypeChecking(self.store, api=ctx.api)
 
             return type_checking.extended_get_attribute_resolve_manager_method(
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
             )
 
-    class SharedAnnotationHookLogic:
-        """
-        Shared logic for modifying the return type of methods and functions that use a concrete
-        annotation with a type variable.
-
-        Note that the signature hook will already raise errors if a concrete annotation is
-        used with a type var in a type guard.
-        """
-
-        def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
-            self.plugin = plugin
-            self.store = plugin.store
-            self.fullname = fullname
-
-        def choose(self) -> bool:
-            """
-            Choose methods and functions either returning a type guard or have a generic
-            return type.
-
-            We determine whether the return type is a concrete annotation or not in the run method.
-            """
-            if self.fullname.startswith("builtins."):
-                return False
-
-            sym = self.plugin.lookup_fully_qualified(self.fullname)
-            if not sym or not sym.node:
-                return False
-
-            call = getattr(sym.node, "type", None)
-            if not isinstance(call, CallableType):
-                return False
-
-            return bool(call.type_guard or call.is_generic())
-
-        def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
-            assert isinstance(ctx.api, TypeChecker)
-
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
-
-            return type_checking.modify_return_type(ctx)
-
     class _get_method_or_function_hook(Hook[MethodContext | FunctionContext, MypyType]):
         runner: Callable[[MethodContext | FunctionContext], MypyType | None]
 
         def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedAnnotationHookLogic(
-                fullname=self.fullname, plugin=self.plugin
+            super().extra_init()
+            self.shared_logic = actions.SharedAnnotationHookLogic(
+                self.store, fullname=self.fullname
             )
 
         def choose(self) -> bool:
@@ -313,56 +257,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     class get_function_hook(_get_method_or_function_hook):
         pass
 
-    class SharedSignatureHookLogic:
-        """
-        Shared logic for modifying the signature of methods and functions.
-
-        This is only used to find cases where a concrete annotation with a type var
-        is used in a type guard.
-
-        In this situation the mypy plugin system does not provide an opportunity to fully resolve
-        the type guard.
-        """
-
-        def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
-            self.plugin = plugin
-            self.store = plugin.store
-            self.fullname = fullname
-
-        def choose(self) -> bool:
-            """
-            Only choose methods and functions that are returning a type guard
-            """
-            if self.fullname.startswith("builtins."):
-                return False
-
-            sym = self.plugin.lookup_fully_qualified(self.fullname)
-            if not sym or not sym.node:
-                return False
-
-            call = getattr(sym.node, "type", None)
-            if not isinstance(call, CallableType):
-                return False
-
-            return call.type_guard is not None
-
-        def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
-            assert isinstance(ctx.api, TypeChecker)
-
-            type_checking = actions.TypeChecking(
-                self.store,
-                api=ctx.api,
-                lookup_info=self.plugin._lookup_info,
-            )
-
-            return type_checking.check_typeguard(ctx.context)
-
     class _get_method_or_function_signature_hook(
         Hook[MethodSigContext | FunctionSigContext, FunctionLike]
     ):
         def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedSignatureHookLogic(
-                fullname=self.fullname, plugin=self.plugin
+            super().extra_init()
+            self.shared_logic = actions.SharedSignatureHookLogic(
+                self.store, fullname=self.fullname
             )
 
         def choose(self) -> bool:

@@ -3,8 +3,23 @@ from collections.abc import Iterator, Mapping
 from typing import Protocol
 
 from mypy.checker import TypeChecker
-from mypy.nodes import CallExpr, Context, MemberExpr, TypeInfo
-from mypy.plugin import AttributeContext, FunctionContext, MethodContext
+from mypy.nodes import (
+    CallExpr,
+    Context,
+    MemberExpr,
+    MypyFile,
+    SymbolTable,
+    SymbolTableNode,
+    TypeInfo,
+    TypeVarExpr,
+)
+from mypy.plugin import (
+    AttributeContext,
+    FunctionContext,
+    FunctionSigContext,
+    MethodContext,
+    MethodSigContext,
+)
 from mypy.types import (
     AnyType,
     CallableType,
@@ -21,10 +36,11 @@ from mypy.types import Type as MypyType
 from typing_extensions import Self
 
 from .. import _known_annotations, _store
+from . import _annotation_resolver
 
 
-class LookupFunction(Protocol):
-    def __call__(self, fullname: str) -> TypeInfo | None: ...
+class FailFunc(Protocol):
+    def __call__(self, message: str) -> None: ...
 
 
 class ResolveManagerMethodFromInstance(Protocol):
@@ -33,47 +49,111 @@ class ResolveManagerMethodFromInstance(Protocol):
     ) -> MypyType: ...
 
 
-def _find_type_vars(
-    item: MypyType, _chain: list[ProperType] | None = None
-) -> list[TypeVarType | str]:
-    if _chain is None:
-        _chain = []
+@dataclasses.dataclass
+class DefiningScope:
+    _api: TypeChecker
+    _scopes: list[SymbolTable]
 
-    result: list[TypeVarType | str] = []
-
-    item = get_proper_type(item)
-
-    if isinstance(item, TypeVarType):
-        result.append(item)
-
-    elif isinstance(item, UnboundType):
-        if item.args:
-            for arg in item.args:
-                if arg not in _chain:
-                    _chain.append(get_proper_type(arg))
-                    result.extend(_find_type_vars(arg, _chain=_chain))
+    def resolve(self, want: str) -> SymbolTableNode | None:
+        if "." not in want:
+            for scope in self._scopes:
+                if want in scope:
+                    return scope[want]
+            return None
         else:
-            _chain.append(item)
-            result.append(item.name)
+            first, rest = want.split(".", 1)
+            for scope in self._scopes:
+                if first in scope:
+                    found = scope[first]
+                    if not isinstance(found.node, MypyFile):
+                        continue
 
-    return result
+                    return self.resolve(rest)
+            return None
+
+    def find_type_vars(
+        self, item: MypyType, _chain: list[ProperType] | None = None
+    ) -> tuple[list[tuple[bool, TypeVarType | str]], ProperType]:
+        if _chain is None:
+            _chain = []
+
+        result: list[tuple[bool, TypeVarType | str]] = []
+
+        item = get_proper_type(item)
+
+        is_type: bool = False
+        if isinstance(item, TypeType):
+            is_type = True
+            item = item.item
+
+        if isinstance(item, UnboundType):
+            node = self.resolve(item.name)
+            if node and isinstance(node.node, TypeVarExpr):
+                result.append((is_type, node.node.name))
+
+        if isinstance(item, TypeVarType):
+            if item not in _chain:
+                result.append((is_type, item))
+
+        elif isinstance(item, UnionType):
+            for arg in item.items:
+                proper = get_proper_type(arg)
+                if isinstance(proper, TypeType):
+                    proper = proper.item
+
+                if proper not in _chain:
+                    _chain.append(proper)
+                    for nxt_is_type, nxt in self.find_type_vars(arg, _chain=_chain)[0]:
+                        result.append((is_type or nxt_is_type, nxt))
+
+        return result, item
+
+    def determine_if_concrete(
+        self, item: ProperType
+    ) -> _known_annotations.KnownAnnotations | None:
+        concrete_annotation: _known_annotations.KnownAnnotations | None = None
+
+        if isinstance(item, UnboundType):
+            node = self.resolve(item.name)
+            if node and isinstance(node.node, TypeInfo):
+                item = Instance(node.node, [])
+
+        if isinstance(item, Instance):
+            try:
+                concrete_annotation = _known_annotations.KnownAnnotations(item.type.fullname)
+            except ValueError:
+                pass
+
+        return concrete_annotation
 
 
 @dataclasses.dataclass
 class BasicTypeInfo:
+    func: CallableType
+    fail: FailFunc
+
     is_type: bool
     is_guard: bool
-    api: TypeChecker
-    func: CallableType
 
     item: ProperType
-    type_vars: list[TypeVarType | str]
+    type_vars: list[tuple[bool, TypeVarType | str]]
+    lookup_info: _store.LookupInfo
+    defining_scope: DefiningScope
     concrete_annotation: _known_annotations.KnownAnnotations | None
 
     @classmethod
-    def create(cls, api: TypeChecker, func: CallableType, item: MypyType | None = None) -> Self:
+    def create(
+        cls,
+        func: CallableType,
+        fail: FailFunc,
+        defining_scope: DefiningScope,
+        lookup_info: _store.LookupInfo,
+        item: MypyType | None = None,
+    ) -> Self:
         is_type: bool = False
         is_guard: bool = False
+
+        item_passed_in: bool = item is not None
 
         if item is None:
             if func.type_guard:
@@ -87,30 +167,34 @@ class BasicTypeInfo:
             is_type = True
             item = item.item
 
-        type_vars = _find_type_vars(item)
+        concrete_annotation = defining_scope.determine_if_concrete(item)
+        if concrete_annotation and not item_passed_in and isinstance(item, Instance | UnboundType):
+            type_vars, item = defining_scope.find_type_vars(UnionType(item.args))
+        else:
+            type_vars, item = defining_scope.find_type_vars(item)
 
-        concrete_annotation: _known_annotations.KnownAnnotations | None = None
-        if isinstance(item, UnboundType):
-            try:
-                named_generic_type_name = api.named_generic_type(
-                    item.name, list(item.args)
-                ).type.fullname
-            except AssertionError:
-                named_generic_type_name = ""
-
-            try:
-                concrete_annotation = _known_annotations.KnownAnnotations(named_generic_type_name)
-            except ValueError:
-                pass
+        if isinstance(item, UnionType) and len(item.items) == 1:
+            item = item.items[0]
 
         return cls(
-            api=api,
             func=func,
-            item=item,
+            fail=fail,
+            item=get_proper_type(item),
             is_type=is_type,
             is_guard=is_guard,
             type_vars=type_vars,
+            lookup_info=lookup_info,
+            defining_scope=defining_scope,
             concrete_annotation=concrete_annotation,
+        )
+
+    def _clone_with_item(self, item: MypyType) -> Self:
+        return self.create(
+            func=self.func,
+            fail=self.fail,
+            item=item,
+            lookup_info=self.lookup_info,
+            defining_scope=self.defining_scope,
         )
 
     @property
@@ -119,7 +203,9 @@ class BasicTypeInfo:
             return True
 
         for item in self.items():
-            if item is not self and item.contains_concrete_annotation:
+            if item.item is self.item:
+                continue
+            if item.contains_concrete_annotation:
                 return True
 
         return False
@@ -127,14 +213,14 @@ class BasicTypeInfo:
     def items(self) -> Iterator[Self]:
         if isinstance(self.item, UnionType):
             for item in self.item.items:
-                yield self.__class__.create(self.api, self.func, item)
+                yield self._clone_with_item(item)
         else:
-            yield self
+            yield self._clone_with_item(self.item)
 
     def map_type_vars(
         self, context: Context, callee_arg_names: list[str | None], arg_types: list[list[MypyType]]
-    ) -> Mapping[TypeVarType | str, ProperType]:
-        result: dict[TypeVarType | str, ProperType] = {}
+    ) -> Mapping[TypeVarType | str, Instance | TypeType]:
+        result: dict[TypeVarType | str, Instance | TypeType] = {}
 
         formal_by_name = {arg.name: arg.typ for arg in self.func.formal_arguments()}
 
@@ -148,38 +234,96 @@ class BasicTypeInfo:
                 if isinstance(found_type, CallableType):
                     found_type = get_proper_type(found_type.ret_type)
 
-                result[underlying] = found_type
-                result[underlying.name] = found_type
+                if isinstance(found_type, Instance):
+                    result[underlying] = found_type
+                    result[underlying.name] = found_type
 
-        for type_var in self.type_vars:
+        for is_type, type_var in self.type_vars:
             if type_var not in result:
-                self.api.fail(
-                    f"Failed to find an argument that matched the type var {type_var}", context
-                )
-                result[type_var] = AnyType(TypeOfAny.from_error)
+                self.fail(f"Failed to find an argument that matched the type var {type_var}")
+            else:
+                if is_type:
+                    result[type_var] = TypeType(result[type_var])
 
         return result
 
+    def transform(
+        self,
+        type_checking: "TypeChecking",
+        context: Context,
+        type_vars_map: Mapping[TypeVarType | str, Instance | TypeType],
+        resolver: _annotation_resolver.AnnotationResolver,
+    ) -> Instance | TypeType | UnionType | AnyType | None:
+        if self.concrete_annotation is None:
+            found: Instance | TypeType
+
+            look: MypyType | str
+            if isinstance(self.item, UnboundType):
+                look = self.item.name
+            else:
+                look = self.item
+
+            if isinstance(look, TypeVarType | str):
+                if look in type_vars_map:
+                    found = type_vars_map[look]
+                else:
+                    self.fail(f"Failed to work out type for type var {look}")
+                    return AnyType(TypeOfAny.from_error)
+            elif not isinstance(look, TypeType | Instance):
+                self.fail(f"Got an unexpected item in the concrete annotation, {self.item}")
+                return AnyType(TypeOfAny.from_error)
+            else:
+                found = look
+
+            if self.is_type and not isinstance(found, TypeType):
+                return TypeType(found)
+            else:
+                return found
+
+        models: list[Instance | TypeType] = []
+        for child in self.items():
+            nxt = child.transform(type_checking, context, type_vars_map, resolver=resolver)
+            if nxt is None or isinstance(nxt, AnyType | UnionType):
+                # Children in self.items() should never return UnionType from transform
+                return nxt
+
+            if self.is_type and not isinstance(nxt, TypeType):
+                nxt = TypeType(nxt)
+
+            models.append(nxt)
+
+        arg: MypyType
+        if len(models) == 1:
+            arg = models[0]
+        else:
+            arg = UnionType(tuple(models))
+
+        return resolver.resolve(self.concrete_annotation, arg)
+
 
 class TypeChecking:
-    def __init__(
-        self, store: _store.Store, *, api: TypeChecker, lookup_info: LookupFunction
-    ) -> None:
+    def __init__(self, store: _store.Store, *, api: TypeChecker) -> None:
         self.api = api
         self.store = store
-        self._lookup_info = lookup_info
+
+    def _named_type_or_none(
+        self, fullname: str, args: list[MypyType] | None = None
+    ) -> Instance | None:
+        node = self.lookup_info(fullname)
+        if not isinstance(node, TypeInfo):
+            return None
+        if args:
+            return Instance(node, args)
+        return Instance(node, [AnyType(TypeOfAny.special_form)] * len(node.defn.type_vars))
 
     def _named_type(self, fullname: str, args: list[MypyType] | None = None) -> Instance:
-        """
-        Copied from what semantic analyzer does
-        """
-        node = self._lookup_info(fullname)
+        node = self.lookup_info(fullname)
         assert isinstance(node, TypeInfo)
         if args:
             return Instance(node, args)
         return Instance(node, [AnyType(TypeOfAny.special_form)] * len(node.defn.type_vars))
 
-    def _get_info(self, context: Context) -> BasicTypeInfo | None:
+    def _get_info(self, context: Context, is_function: bool) -> BasicTypeInfo | None:
         if not isinstance(context, CallExpr):
             return None
 
@@ -194,10 +338,38 @@ class TypeChecking:
         if not isinstance(func, CallableType):
             return None
 
-        return BasicTypeInfo.create(api=self.api, func=func)
+        if not func.definition:
+            return None
 
-    def check_typeguard(self, context: Context) -> MypyType | None:
-        info = self._get_info(context)
+        defining_scopes: list[SymbolTable] = []
+        if is_function:
+            module, _ = func.definition.fullname.rsplit(".", 1)
+            class_name = ""
+        else:
+            module, class_name, _ = func.definition.fullname.rsplit(".", 2)
+
+        if module not in self.api.modules:
+            self.api.fail(f"Failed to find defining module: {module}", context)
+            return None
+
+        mod = self.api.modules[module]
+        defining_scopes = [mod.names]
+        if class_name:
+            cls = mod.names[class_name]
+            if not isinstance(cls.node, TypeInfo):
+                self.api.fail(f"Failed to find defining class: {module}.{class_name}", context)
+                return None
+            defining_scopes.append(cls.node.names)
+
+        return BasicTypeInfo.create(
+            func=func,
+            fail=lambda msg: self.api.fail(msg, context),
+            lookup_info=self.lookup_info,
+            defining_scope=DefiningScope(_api=self.api, _scopes=defining_scopes),
+        )
+
+    def check_typeguard(self, context: Context, is_function: bool) -> MypyType | None:
+        info = self._get_info(context, is_function=is_function)
         if info is None:
             return None
 
@@ -212,7 +384,7 @@ class TypeChecking:
         return None
 
     def modify_return_type(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
-        info = self._get_info(ctx.context)
+        info = self._get_info(ctx.context, is_function=isinstance(ctx, FunctionContext))
         if info is None:
             return None
 
@@ -223,127 +395,21 @@ class TypeChecking:
         if not info.contains_concrete_annotation:
             return None
 
-        result: list[MypyType] = []
-
         type_vars_map = info.map_type_vars(ctx.context, ctx.callee_arg_names, ctx.arg_types)
 
-        for item in info.items():
-            Known = _known_annotations.KnownAnnotations
-            if item.concrete_annotation is None:
-                if isinstance(item.item, TypeVarType):
-                    result.append(type_vars_map.get(item.item, item.item))
-                elif isinstance(item.item, UnboundType) and len(item.item.args) == 0:
-                    result.append(type_vars_map.get(item.item.name, item.item))
-                else:
-                    result.append(item.item)
-                continue
+        resolver = _annotation_resolver.AnnotationResolver(
+            self.store,
+            defer=lambda: True,
+            fail=lambda msg: ctx.api.fail(msg, ctx.context),
+            lookup_info=self.lookup_info,
+            named_type_or_none=self._named_type_or_none,
+        )
 
-            is_type = item.is_type and not info.is_type
-
-            # It has to be an instance or unbound type if it has a concrete annotation
-            assert isinstance(item.item, Instance | UnboundType)
-
-            if len(item.item.args) != 1:
-                self.api.fail("Concrete Annotations must take exactly one argument", ctx.context)
-                return AnyType(TypeOfAny.from_error)
-
-            model = item.item.args[0]
-            if isinstance(model, TypeVarType | UnboundType):
-                found: ProperType | None = None
-                if isinstance(model, TypeVarType):
-                    found = type_vars_map.get(model)
-                elif isinstance(model, UnboundType):
-                    found = type_vars_map.get(model.name)
-
-                if found is None:
-                    self.api.fail(
-                        f"Can't determine what model the type var {model} represents", ctx.context
-                    )
-                    return AnyType(TypeOfAny.from_error)
-                else:
-                    if isinstance(found, AnyType):
-                        return found
-
-                    model = found
-
-            model = get_proper_type(model)
-            instances: list[Instance] = []
-            if isinstance(model, Instance):
-                instances.append(model)
-            elif isinstance(model, UnionType):
-                for member in model.items:
-                    member = get_proper_type(member)
-                    if isinstance(member, Instance):
-                        instances.append(member)
-                    else:
-                        self.api.fail(
-                            f"Failed to have a list of instances to find for a concrete annotation, {member}",
-                            ctx.context,
-                        )
-                        return AnyType(TypeOfAny.from_error)
-
-            made: MypyType
-            if item.concrete_annotation is Known.CONCRETE:
-                made = self.get_concrete_types(ctx.context, instances=instances)
-            elif item.concrete_annotation is Known.DEFAULT_QUERYSET:
-                made = self.get_default_queryset_return_type(
-                    ctx.context, instances=UnionType(tuple(instances))
-                )
-            elif item.concrete_annotation is Known.CONCRETE_QUERYSET:
-                made = self.get_concrete_queryset_return_type(ctx.context, instances=instances)
-
-            if is_type:
-                made = TypeType(made)
-
-            result.append(made)
-
-        final: MypyType = UnionType(tuple(result))
-        if info.is_type:
-            final = TypeType(final)
-
-        return final
-
-    def get_concrete_queryset_return_type(
-        self, context: Context, *, instances: list[Instance]
-    ) -> MypyType:
-        result: list[MypyType] = []
-        for concrete in self.get_concrete_types(context, instances=instances).items:
-            concrete = get_proper_type(concrete)
-            assert isinstance(concrete, Instance)
-            try:
-                result.extend(self.store.realise_querysets(concrete, self.lookup_info))
-            except _store.RestartDmypy as err:
-                self.api.fail(f"You probably need to restart dmypy: {err}", context)
-                return AnyType(TypeOfAny.from_error)
-            except _store.UnionMustBeOfTypes:
-                self.api.fail("Union must be of instances of models", context)
-                return AnyType(TypeOfAny.from_error)
-
-        return UnionType(tuple(result))
-
-    def get_default_queryset_return_type(
-        self, context: Context, *, instances: Instance | UnionType
-    ) -> MypyType:
-        try:
-            querysets = tuple(self.store.realise_querysets(instances, self.lookup_info))
-        except _store.RestartDmypy as err:
-            self.api.fail(f"You probably need to restart dmypy: {err}", context)
-            return AnyType(TypeOfAny.from_error)
-        except _store.UnionMustBeOfTypes:
-            self.api.fail("Union must be of instances of models", context)
-            return AnyType(TypeOfAny.from_error)
+        result = info.transform(self, ctx.context, type_vars_map, resolver=resolver)
+        if isinstance(result, UnionType) and len(result.items) == 1:
+            return result.items[0]
         else:
-            return UnionType(querysets)
-
-    def get_concrete_types(self, context: Context, *, instances: list[Instance]) -> UnionType:
-        result: list[MypyType] = []
-        for item in instances:
-            result.extend(
-                self.store.retrieve_concrete_children_types(
-                    item.type, self.lookup_info, self._named_type
-                )
-            )
-        return UnionType(tuple(result))
+            return result
 
     def extended_get_attribute_resolve_manager_method(
         self,
@@ -402,4 +468,121 @@ class TypeChecking:
             return AnyType(TypeOfAny.from_error)
 
     def lookup_info(self, fullname: str) -> TypeInfo | None:
-        return self.store._plugin_lookup_info(fullname)
+        return self.store.plugin_lookup_info(fullname)
+
+
+class SharedAnnotationHookLogic:
+    """
+    Shared logic for modifying the return type of methods and functions that use a concrete
+    annotation with a type variable.
+
+    Note that the signature hook will already raise errors if a concrete annotation is
+    used with a type var in a type guard.
+    """
+
+    def __init__(self, store: _store.Store, fullname: str) -> None:
+        self.store = store
+        self.fullname = fullname
+
+    def choose(self) -> bool:
+        """
+        Choose methods and functions either returning a type guard or have a generic
+        return type.
+
+        We determine whether the return type is a concrete annotation or not in the run method.
+        """
+        if self.fullname.startswith("builtins."):
+            return False
+
+        sym = self.store.plugin_lookup_fully_qualified(self.fullname)
+        if not sym or not sym.node:
+            return False
+
+        call = getattr(sym.node, "type", None)
+        if not isinstance(call, CallableType):
+            return False
+
+        ret_type = call.ret_type
+        if call.type_guard:
+            ret_type = call.type_guard
+
+        ret_type = get_proper_type(ret_type)
+        if isinstance(ret_type, TypeType):
+            ret_type = ret_type.item
+
+        if isinstance(ret_type, UnboundType):
+            return ret_type.name in [
+                known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
+            ]
+        elif isinstance(ret_type, Instance):
+            try:
+                _known_annotations.KnownAnnotations(ret_type.type.fullname)
+            except ValueError:
+                return False
+            else:
+                return True
+        else:
+            return False
+
+    def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
+        assert isinstance(ctx.api, TypeChecker)
+
+        type_checking = TypeChecking(self.store, api=ctx.api)
+
+        return type_checking.modify_return_type(ctx)
+
+
+class SharedSignatureHookLogic:
+    """
+    Shared logic for modifying the signature of methods and functions.
+
+    This is only used to find cases where a concrete annotation with a type var
+    is used in a type guard.
+
+    In this situation the mypy plugin system does not provide an opportunity to fully resolve
+    the type guard.
+    """
+
+    def __init__(self, store: _store.Store, fullname: str) -> None:
+        self.store = store
+        self.fullname = fullname
+
+    def choose(self) -> bool:
+        """
+        Only choose methods and functions that are returning a type guard
+        """
+        if self.fullname.startswith("builtins."):
+            return False
+
+        sym = self.store.plugin_lookup_fully_qualified(self.fullname)
+        if not sym or not sym.node:
+            return False
+
+        call = getattr(sym.node, "type", None)
+        if not isinstance(call, CallableType):
+            return False
+
+        ret_type = call.ret_type
+        if call.type_guard:
+            ret_type = call.type_guard
+
+        ret_type = get_proper_type(ret_type)
+
+        if isinstance(ret_type, TypeType):
+            ret_type = ret_type.item
+
+        if not isinstance(ret_type, UnboundType):
+            return False
+
+        return ret_type.name in [
+            known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
+        ]
+
+    def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
+        assert isinstance(ctx.api, TypeChecker)
+
+        type_checking = TypeChecking(self.store, api=ctx.api)
+
+        return type_checking.check_typeguard(
+            ctx.context, is_function=isinstance(ctx, FunctionSigContext)
+        )
