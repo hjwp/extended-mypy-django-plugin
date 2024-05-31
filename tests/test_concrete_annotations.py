@@ -33,6 +33,15 @@ class TestConcreteAnnotations:
                 assert check_instance_with_type_guard(instance)
                 reveal_type(instance)
 
+                children: Concrete[Parent]
+                reveal_type(children)
+
+                children_qs1: ConcreteQuerySet[Parent]
+                reveal_type(children_qs1)
+
+                children_qs2: DefaultQuerySet[Parent]
+                reveal_type(children_qs2)
+
                 child: Concrete[Child1]
                 reveal_type(child)
 
@@ -69,22 +78,34 @@ class TestConcreteAnnotations:
                 ),
                 (
                     27,
-                    "Union[myapp.models.Child1]",
+                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
                 ),
                 (
                     30,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
                 ),
                 (
                     33,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                    "Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]",
                 ),
                 (
                     36,
-                    "Union[myapp.models.Child2QuerySet]",
+                    "Union[myapp.models.Child1]",
                 ),
                 (
                     39,
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                ),
+                (
+                    42,
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                ),
+                (
+                    45,
+                    "Union[myapp.models.Child2QuerySet]",
+                ),
+                (
+                    48,
                     "Union[myapp.models.Child2QuerySet]",
                 ),
             ]
