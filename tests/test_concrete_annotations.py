@@ -5,7 +5,9 @@ class TestConcreteAnnotations:
     def test_simple_annotation(self, scenario: Scenario) -> None:
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
-            scenario.make_file(
+            scenario.make_file_with_reveals(
+                expected,
+                28,
                 "main.py",
                 """
                 from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
@@ -13,218 +15,99 @@ class TestConcreteAnnotations:
 
                 from myapp.models import Parent, Child1, Child2
 
-                models: Concrete[Parent]
-                reveal_type(models)
-
-                qs: ConcreteQuerySet[Parent]
-                reveal_type(qs)
-
                 def check_cls_with_type_guard(cls: type[Parent]) -> TypeGuard[type[Concrete[Parent]]]:
                     return True
 
                 def check_instance_with_type_guard(cls: Parent) -> TypeGuard[Concrete[Parent]]:
                     return True
 
+                models: Concrete[Parent]
+                # ^ REVEAL models ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
+
+                qs: ConcreteQuerySet[Parent]
+                # ^ REVEAL qs ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]
+
                 cls: type[Parent] = Child1
                 assert check_cls_with_type_guard(cls)
-                reveal_type(cls)
+                # ^ REVEAL cls ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
 
                 instance: Parent = cast(Child1, None)
                 assert check_instance_with_type_guard(instance)
-                reveal_type(instance)
+                # ^ REVEAL instance ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
 
                 children: Concrete[Parent]
-                reveal_type(children)
+                # ^ REVEAL children ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
 
                 children_qs1: ConcreteQuerySet[Parent]
-                reveal_type(children_qs1)
+                # ^ REVEAL children_qs1 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]
 
                 children_qs2: DefaultQuerySet[Parent]
-                reveal_type(children_qs2)
+                # ^ REVEAL children_qs2 ^ Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]
 
                 child: Concrete[Child1]
-                reveal_type(child)
+                # ^ REVEAL child ^ Union[myapp.models.Child1]
 
                 child1_qs1: ConcreteQuerySet[Child1]
-                reveal_type(child1_qs1)
+                # ^ REVEAL child1_qs1 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 child1_qs2: DefaultQuerySet[Child1]
-                reveal_type(child1_qs2)
+                # ^ REVEAL child1_qs2 ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 child2_qs1: ConcreteQuerySet[Child2]
-                reveal_type(child2_qs1)
+                # ^ REVEAL child2_qs1 ^ Union[myapp.models.Child2QuerySet]
 
                 child2_qs2: DefaultQuerySet[Child2]
-                reveal_type(child2_qs2)
+                # ^ REVEAL child2_qs2 ^ Union[myapp.models.Child2QuerySet]
 
                 t1_children: type[Concrete[Parent]]
-                reveal_type(t1_children)
+                # ^ REVEAL t1_children ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
 
                 t1_children_qs1: type[ConcreteQuerySet[Parent]]
-                reveal_type(t1_children_qs1)
+                # ^ REVEAL t1_children_qs1 ^ Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
 
                 t1_children_qs2: type[DefaultQuerySet[Parent]]
-                reveal_type(t1_children_qs2)
+                # ^ REVEAL t1_children_qs2 ^ type[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]
 
                 t1_child: type[Concrete[Child1]]
-                reveal_type(t1_child)
+                # ^ REVEAL t1_child ^ type[myapp.models.Child1]
 
                 t1_child1_qs1: type[ConcreteQuerySet[Child1]]
-                reveal_type(t1_child1_qs1)
+                # ^ REVEAL t1_child1_qs1 ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 t1_child1_qs2: type[DefaultQuerySet[Child1]]
-                reveal_type(t1_child1_qs2)
+                # ^ REVEAL t1_child1_qs2 ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
 
                 t1_child2_qs1: type[ConcreteQuerySet[Child2]]
-                reveal_type(t1_child2_qs1)
+                # ^ REVEAL t1_child2_qs1 ^ type[myapp.models.Child2QuerySet]
 
                 t1_child2_qs2: type[DefaultQuerySet[Child2]]
-                reveal_type(t1_child2_qs2)
+                # ^ REVEAL t1_child2_qs2 ^ type[myapp.models.Child2QuerySet]
 
                 t2_children: Concrete[type[Parent]]
-                reveal_type(t2_children)
+                # ^ REVEAL t2_children ^ type[Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]]
 
                 t2_children_qs1: ConcreteQuerySet[type[Parent]]
-                reveal_type(t2_children_qs1)
+                # ^ REVEAL t2_children_qs1 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
 
                 t2_children_qs2: DefaultQuerySet[type[Parent]]
-                reveal_type(t2_children_qs2)
+                # ^ REVEAL t2_children_qs2 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]]
 
                 t2_child: Concrete[type[Child1]]
-                reveal_type(t2_child)
+                # ^ REVEAL t2_child ^ type[Union[myapp.models.Child1]]
 
                 t2_child1_qs1: ConcreteQuerySet[type[Child1]]
-                reveal_type(t2_child1_qs1)
+                # ^ REVEAL t2_child1_qs1 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]
 
                 t2_child1_qs2: DefaultQuerySet[type[Child1]]
-                reveal_type(t2_child1_qs2)
+                # ^ REVEAL t2_child1_qs2 ^ type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]
 
                 t2_child2_qs1: ConcreteQuerySet[type[Child2]]
-                reveal_type(t2_child2_qs1)
+                # ^ REVEAL t2_child2_qs1 ^ type[Union[myapp.models.Child2QuerySet]]
 
                 t2_child2_qs2: DefaultQuerySet[type[Child2]]
-                reveal_type(t2_child2_qs2)
+                # ^ REVEAL t2_child2_qs2 ^ type[Union[myapp.models.Child2QuerySet]]
                 """,
             )
-
-            revealed: list[tuple[int, str]] = [
-                (
-                    7,
-                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                ),
-                (
-                    10,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
-                ),
-                (
-                    20,
-                    "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
-                ),
-                (
-                    24,
-                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                ),
-                (
-                    27,
-                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                ),
-                (
-                    30,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
-                ),
-                (
-                    33,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]",
-                ),
-                (
-                    36,
-                    "Union[myapp.models.Child1]",
-                ),
-                (
-                    39,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                ),
-                (
-                    42,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                ),
-                (
-                    45,
-                    "Union[myapp.models.Child2QuerySet]",
-                ),
-                (
-                    48,
-                    "Union[myapp.models.Child2QuerySet]",
-                ),
-                (
-                    51,
-                    "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
-                ),
-                (
-                    54,
-                    "Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]",
-                ),
-                (
-                    57,
-                    "type[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]",
-                ),
-                (
-                    60,
-                    "type[myapp.models.Child1]",
-                ),
-                (
-                    63,
-                    "type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                ),
-                (
-                    66,
-                    "type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                ),
-                (
-                    69,
-                    "type[myapp.models.Child2QuerySet]",
-                ),
-                (
-                    72,
-                    "type[myapp.models.Child2QuerySet]",
-                ),
-                (
-                    75,
-                    "type[Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]]",
-                ),
-                (
-                    78,
-                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]",
-                ),
-                (
-                    81,
-                    "type[Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]]",
-                ),
-                (
-                    84,
-                    "type[Union[myapp.models.Child1]]",
-                ),
-                (
-                    87,
-                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]",
-                ),
-                (
-                    90,
-                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]",
-                ),
-                (
-                    93,
-                    "type[Union[myapp.models.Child2QuerySet]]",
-                ),
-                (
-                    96,
-                    "type[Union[myapp.models.Child2QuerySet]]",
-                ),
-            ]
-
-            main_expections = expected.on("main.py")
-            for lnum, expectation in revealed:
-                main_expections.add_revealed_type(lnum, expectation)
 
     def test_sees_apps_removed_when_they_still_exist_but_no_longer_installed(
         self, scenario: Scenario
