@@ -50,45 +50,48 @@ class TestConcreteAnnotations:
                 """,
             )
 
-            (
-                expected.on("main.py")
-                .add_revealed_type(
+            revealed: list[tuple[int, str]] = [
+                (
                     7,
                     "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     10,
                     "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     20,
                     "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     24,
                     "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     27,
                     "Union[myapp.models.Child1]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     30,
                     "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     33,
                     "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     36,
                     "Union[myapp.models.Child2QuerySet]",
-                )
-                .add_revealed_type(
+                ),
+                (
                     39,
                     "Union[myapp.models.Child2QuerySet]",
-                )
-            )
+                ),
+            ]
+
+            main_expections = expected.on("main.py")
+            for lnum, expectation in revealed:
+                main_expections.add_revealed_type(lnum, expectation)
 
     def test_sees_apps_removed_when_they_still_exist_but_no_longer_installed(
         self, scenario: Scenario
