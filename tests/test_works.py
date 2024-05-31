@@ -2,7 +2,6 @@ from extended_mypy_django_plugin_test_driver import OutputBuilder, Scenario
 
 
 def test_works(scenario: Scenario) -> None:
-    # TODO: make sure the default queryset is expanded again
     out = """
      main:33: note: Revealed type is "Union[django.db.models.manager.Manager[myapp.models.Child1], myapp.models.ManagerFromChild2QuerySet[myapp.models.Child2], django.db.models.manager.Manager[myapp.models.Child3], django.db.models.manager.Manager[myapp2.models.ChildOther]]"
      main:38: note: Revealed type is "myapp.models.Child1"
@@ -12,8 +11,8 @@ def test_works(scenario: Scenario) -> None:
      main:48: note: Revealed type is "myapp.models.Child2QuerySet"
      main:49: note: Revealed type is "myapp.models.ManagerFromChild2QuerySet[myapp.models.Child2]"
      main:50: note: Revealed type is "myapp.models.Child2QuerySet[myapp.models.Child2]"
-     main:53: note: Revealed type is "extended_mypy_django_plugin.annotations.DefaultQuerySet[myapp.models.Child1]"
-     main:56: note: Revealed type is "extended_mypy_django_plugin.annotations.DefaultQuerySet[myapp.models.Child2]"
+     main:53: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]"
+     main:56: note: Revealed type is "myapp.models.Child2QuerySet"
      main:59: note: Revealed type is "Union[myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]"
      """
 

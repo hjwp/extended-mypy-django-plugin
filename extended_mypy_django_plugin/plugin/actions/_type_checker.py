@@ -30,6 +30,7 @@ from mypy.types import Type as MypyType
 from typing_extensions import Self
 
 from .. import _known_annotations, _store
+from . import _annotation_resolver
 
 
 class LookupFunction(Protocol):
@@ -249,7 +250,8 @@ class BasicTypeInfo:
         type_checking: "TypeChecking",
         context: Context,
         type_vars_map: Mapping[TypeVarType | str, Instance | TypeType],
-    ) -> Instance | TypeType | AnyType:
+        resolver: _annotation_resolver.AnnotationResolver,
+    ) -> Instance | TypeType | UnionType | AnyType | None:
         if self.concrete_annotation is None:
             found: Instance | TypeType
 
@@ -278,8 +280,8 @@ class BasicTypeInfo:
 
         models: list[Instance | TypeType] = []
         for child in self.items():
-            nxt = child.transform(type_checking, context, type_vars_map)
-            if isinstance(nxt, AnyType | UnionType):
+            nxt = child.transform(type_checking, context, type_vars_map, resolver=resolver)
+            if nxt is None or isinstance(nxt, AnyType | UnionType):
                 # Children in self.items() should never return UnionType from transform
                 return nxt
 
@@ -294,12 +296,7 @@ class BasicTypeInfo:
         else:
             arg = UnionType(tuple(models))
 
-        info = self.lookup_info(self.concrete_annotation.value)
-        if info is None:
-            self.fail(f"Failed to resolve the annotation itself, {self.concrete_annotation.value}")
-            return AnyType(TypeOfAny.from_error)
-
-        return Instance(info, [arg])
+        return resolver.resolve(self.concrete_annotation, arg)
 
 
 class TypeChecking:
@@ -307,10 +304,17 @@ class TypeChecking:
         self.api = api
         self.store = store
 
+    def _named_type_or_none(
+        self, fullname: str, args: list[MypyType] | None = None
+    ) -> Instance | None:
+        node = self.lookup_info(fullname)
+        if not isinstance(node, TypeInfo):
+            return None
+        if args:
+            return Instance(node, args)
+        return Instance(node, [AnyType(TypeOfAny.special_form)] * len(node.defn.type_vars))
+
     def _named_type(self, fullname: str, args: list[MypyType] | None = None) -> Instance:
-        """
-        Copied from what semantic analyzer does
-        """
         node = self.lookup_info(fullname)
         assert isinstance(node, TypeInfo)
         if args:
@@ -390,7 +394,16 @@ class TypeChecking:
             return None
 
         type_vars_map = info.map_type_vars(ctx.context, ctx.callee_arg_names, ctx.arg_types)
-        result = info.transform(self, ctx.context, type_vars_map)
+
+        resolver = _annotation_resolver.AnnotationResolver(
+            self.store,
+            defer=lambda: True,
+            fail=lambda msg: ctx.api.fail(msg, ctx.context),
+            lookup_info=self.lookup_info,
+            named_type_or_none=self._named_type_or_none,
+        )
+
+        result = info.transform(self, ctx.context, type_vars_map, resolver=resolver)
         if isinstance(result, UnionType) and len(result.items) == 1:
             return result.items[0]
         else:

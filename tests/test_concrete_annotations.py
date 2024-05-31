@@ -154,8 +154,7 @@ class TestConcreteAnnotations:
                 # ^ REVEAL follower1 ^ example.models.Follower1
 
                 qs2 = make_queryset(cast(Follower1, None))
-                # ^ REVEAL qs2 ^ extended_mypy_django_plugin.annotations.DefaultQuerySet[example.models.Follower1]
-                # TODO: make sure the default queryset is expanded again
+                # ^ REVEAL qs2 ^ example.models.Follower1QuerySet
                 """,
             )
 

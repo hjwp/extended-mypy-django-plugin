@@ -18,7 +18,14 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import CallableType, FunctionLike, Instance, TypeType, UnboundType, get_proper_type
+from mypy.types import (
+    CallableType,
+    FunctionLike,
+    Instance,
+    TypeType,
+    UnboundType,
+    get_proper_type,
+)
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -61,8 +68,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     """
 
     plugin_config: _config.Config
-
-    Annotations = _known_annotations.KnownAnnotations
 
     def __init__(self, options: Options, mypy_version_tuple: tuple[int, int]) -> None:
         super(main.NewSemanalDjangoPlugin, self).__init__(options)
@@ -188,31 +193,22 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         Resolve classes annotated with ``Concrete`` or ``DefaultQuerySet``.
         """
 
+        annotation: _known_annotations.KnownAnnotations
+
         def choose(self) -> bool:
-            return any(
-                member.value == self.fullname
-                for member in ExtendedMypyStubs.Annotations.__members__.values()
-            )
+            try:
+                self.annotation = _known_annotations.KnownAnnotations(self.fullname)
+            except ValueError:
+                return False
+            else:
+                return True
 
         def run(self, ctx: AnalyzeTypeContext) -> MypyType:
             assert isinstance(ctx.api, TypeAnalyser)
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
-            Known = ExtendedMypyStubs.Annotations
-            name = Known(self.fullname)
-
-            type_analyzer = actions.TypeAnalyzing(self.store, api=ctx.api, sem_api=ctx.api.api)
-
-            if name is Known.CONCRETE:
-                method = type_analyzer.find_concrete_models
-
-            elif name is Known.DEFAULT_QUERYSET:
-                method = type_analyzer.find_default_queryset
-
-            else:
-                assert_never(name)
-
-            return method(unbound_type=ctx.type)
+            type_analyzer = actions.TypeAnalyzer(self.store, ctx.api, ctx.api.api)
+            return type_analyzer.analyze(ctx, self.annotation, self.plugin._lookup_info)
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):

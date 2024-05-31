@@ -5,17 +5,65 @@ from mypy.nodes import (
     TypeInfo,
     TypeVarExpr,
 )
-from mypy.plugin import (
-    DynamicClassDefContext,
-)
+from mypy.plugin import AnalyzeTypeContext, DynamicClassDefContext
 from mypy.semanal import SemanticAnalyzer
+from mypy.typeanal import TypeAnalyser
 from mypy.types import (
     AnyType,
     TypeOfAny,
     TypeVarType,
 )
+from mypy.types import (
+    Type as MypyType,
+)
 
-from .. import _store
+from .. import _known_annotations, _store
+from . import _annotation_resolver
+
+
+class TypeAnalyzer:
+    def __init__(self, store: _store.Store, api: TypeAnalyser, sem_api: SemanticAnalyzer) -> None:
+        self.api = api
+        self.store = store
+        self.sem_api = sem_api
+
+    def analyze(
+        self,
+        ctx: AnalyzeTypeContext,
+        annotation: _known_annotations.KnownAnnotations,
+        lookup_info: _store.LookupFunction,
+    ) -> MypyType:
+        def _lookup_info(fullname: str) -> TypeInfo | None:
+            instance = self.sem_api.named_type_or_none(fullname)
+            if instance:
+                return instance.type
+
+            return lookup_info(fullname)
+
+        def defer() -> bool:
+            if self.sem_api.final_iteration:
+                return True
+            else:
+                self.sem_api.defer()
+                return False
+
+        resolver = _annotation_resolver.AnnotationResolver(
+            self.store,
+            defer=defer,
+            fail=lambda msg: self.api.fail(msg, ctx.context),
+            lookup_info=_lookup_info,
+            named_type_or_none=self.sem_api.named_type_or_none,
+        )
+
+        type_arg = resolver.find_type_arg(ctx.type, self.api.analyze_type)
+        if type_arg is None:
+            return ctx.type
+
+        result = resolver.resolve(annotation, type_arg)
+        if result is None:
+            return ctx.type
+        else:
+            return result
 
 
 class SemAnalyzing:
