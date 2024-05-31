@@ -185,8 +185,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     @_hook.hook
     class get_type_analyze_hook(Hook[AnalyzeTypeContext, MypyType]):
         """
-        Resolve classes annotated with ``Concrete``, ``ConcreteQuerySet`` and
-        ``DefaultQuerySet``.
+        Resolve classes annotated with ``Concrete`` or ``DefaultQuerySet``.
         """
 
         def choose(self) -> bool:
@@ -206,9 +205,6 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
 
             if name is Known.CONCRETE:
                 method = type_analyzer.find_concrete_models
-
-            elif name is Known.CONCRETE_QUERYSET:
-                method = type_analyzer.find_concrete_querysets
 
             elif name is Known.DEFAULT_QUERYSET:
                 method = type_analyzer.find_default_queryset

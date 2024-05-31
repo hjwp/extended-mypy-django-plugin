@@ -1,6 +1,6 @@
 from django.http import HttpRequest, HttpResponse, HttpResponseBase
 
-from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
 from .exampleapp.models import Child1, Child2, Parent
 
@@ -11,7 +11,7 @@ def make_child(child: type[T_Child]) -> T_Child:
     return child.objects.create()
 
 
-def make_any_queryset(child: type[Concrete[Parent]]) -> ConcreteQuerySet[Parent]:
+def make_any_queryset(child: type[Concrete[Parent]]) -> DefaultQuerySet[Parent]:
     return child.objects.all()
 
 

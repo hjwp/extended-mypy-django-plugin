@@ -36,7 +36,7 @@ class TypeAnalyzing:
             yield typ
 
     def _analyze_first_type_arg(
-        self, unbound_type: UnboundType, expand: bool = True
+        self, unbound_type: UnboundType
     ) -> tuple[bool, Sequence[Instance] | None]:
         args = unbound_type.args
         type_arg = get_proper_type(self.api.analyze_type(args[0]))
@@ -71,9 +71,6 @@ class TypeAnalyzing:
 
         if not_all_instances:
             return False, None
-
-        if not expand:
-            return is_type, tuple(all_instances)
 
         concrete: list[Instance] = []
         names = ", ".join([item.type.fullname for item in all_instances])
@@ -117,24 +114,8 @@ class TypeAnalyzing:
 
         return self._make_union(is_type, concrete)
 
-    def find_concrete_querysets(self, unbound_type: UnboundType) -> MypyType:
-        is_type, concrete = self._analyze_first_type_arg(unbound_type)
-        if concrete is None:
-            return unbound_type
-
-        try:
-            querysets = tuple(self.store.realise_querysets(UnionType(concrete), self.lookup_info))
-        except _store.RestartDmypy as err:
-            self.api.fail(f"You probably need to restart dmypy: {err}", unbound_type)
-            return AnyType(TypeOfAny.from_error)
-        except _store.UnionMustBeOfTypes:
-            self.api.fail("Union must be of instances of models", unbound_type)
-            return AnyType(TypeOfAny.from_error)
-        else:
-            return self._make_union(is_type, querysets)
-
     def find_default_queryset(self, unbound_type: UnboundType) -> MypyType:
-        is_type, concrete = self._analyze_first_type_arg(unbound_type, expand=False)
+        is_type, concrete = self._analyze_first_type_arg(unbound_type)
         if concrete is None:
             return unbound_type
 

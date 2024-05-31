@@ -16,7 +16,7 @@ class TestErrors:
 
                 from myapp.models import Child1, Parent
 
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete
 
                 T_Parent = TypeVar("T_Parent", bound=Parent)
 
