@@ -17,7 +17,7 @@ def test_works(scenario: Scenario) -> None:
      """
 
     main = """
-    from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+    from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
     from myapp.models import Parent, Child1, Child2
 
@@ -28,7 +28,7 @@ def test_works(scenario: Scenario) -> None:
         return child.objects.create()
 
 
-    def make_any_queryset(child: type[Concrete[Parent]]) -> ConcreteQuerySet[Parent]:
+    def make_any_queryset(child: type[Concrete[Parent]]) -> DefaultQuerySet[Parent]:
         return child.objects.all()
 
 

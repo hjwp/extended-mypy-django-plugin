@@ -9,6 +9,10 @@ Changelog
     * Will now check return types for methods and functions more thorouhgly
     * Will throw errors if a type guard is used with a concrete annotation that uses
       a type var (mypy plugin system is limited in a way that makes this impossible to implement)
+    * The concrete annotations understand ``type[Annotation[inner]]`` and ``Annotation[type[inner]]``
+      better now and will do the right thing
+    * When an annotation would transform into a Union of one item, now it becomes that one item
+    * Removed ``ConcreteQuerySet`` and made ``DefaultQuerySet`` take on that functionality
 
 .. _release-0.5.3:
 

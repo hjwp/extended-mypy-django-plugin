@@ -5,7 +5,7 @@ from typing import Generic, TypeVar
 
 from django.db import models
 
-T_Parent = TypeVar("T_Parent", bound=models.Model)
+T_Parent = TypeVar("T_Parent")
 
 
 class Concrete(Generic[T_Parent]):
@@ -60,16 +60,9 @@ class Concrete(Generic[T_Parent]):
         return TypeVar(name)
 
 
-class ConcreteQuerySet(Generic[T_Parent]):
-    """
-    This is used to annotate a model such that the mypy plugin may turn this into
-    a union of all the default querysets for all the concrete children of the
-    specified abstract model class.
-    """
-
-
 class DefaultQuerySet(Generic[T_Parent]):
     """
     This is used to annotate a model such that the mypy plugin may turn this into
-    the queryset type used by the default manager on the model.
+    a union of all the default querysets for all the concrete children of the
+    specified abstract model class, or of that model when it is a concrete model
     """

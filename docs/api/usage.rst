@@ -72,19 +72,19 @@ model, create a ``TypeVar`` object using ``Concrete.type_var``:
         return cls.objects.create()
 
 
-ConcreteQuerySet
-----------------
+DefaultQuerySet
+---------------
 
 To create a union of the default querysets for the concrete models of an
-abstract class, use the ``ConcreteQuerySet`` annotation:
+abstract class, use the ``DefaultQuerySet`` annotation:
 
 .. code-block:: python
 
-    from extended_mypy_django_plugin import ConcreteQuerySet
+    from extended_mypy_django_plugin import DefaultQuerySet
     from django.db import models
 
 
-    qs: ConcreteQuerySet[AbstractModel]
+    qs: DefaultQuerySet[AbstractModel]
 
     # --------------
     # Equivalent to
@@ -92,10 +92,7 @@ abstract class, use the ``ConcreteQuerySet`` annotation:
 
     qs: models.QuerySet[Concrete1] | Concrete2QuerySet | models.QuerySet[Concrete3]
 
-DefaultQuerySet
----------------
-
-This is similar to ``ConcreteQuerySet`` but works on the concrete models themselves:
+This also works on the concrete models themselves:
 
 .. code-block:: python
 

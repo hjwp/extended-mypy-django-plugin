@@ -5,19 +5,15 @@ class TestConcreteAnnotations:
     def test_simple_annotation(self, scenario: Scenario) -> None:
         @scenario.run_and_check_mypy_after
         def _(expected: OutputBuilder) -> None:
-            scenario.make_file(
+            scenario.make_file_with_reveals(
+                expected,
+                19,
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
                 from typing import cast, TypeGuard
 
                 from myapp.models import Parent, Child1, Child2
-
-                models: Concrete[Parent]
-                reveal_type(models)
-
-                qs: ConcreteQuerySet[Parent]
-                reveal_type(qs)
 
                 def check_cls_with_type_guard(cls: type[Parent]) -> TypeGuard[type[Concrete[Parent]]]:
                     return True
@@ -25,69 +21,65 @@ class TestConcreteAnnotations:
                 def check_instance_with_type_guard(cls: Parent) -> TypeGuard[Concrete[Parent]]:
                     return True
 
+                models: Concrete[Parent]
+                # ^ REVEAL models ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
+
+                qs: DefaultQuerySet[Parent]
+                # ^ REVEAL qs ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]
+
                 cls: type[Parent] = Child1
                 assert check_cls_with_type_guard(cls)
-                reveal_type(cls)
+                # ^ REVEAL cls ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
 
                 instance: Parent = cast(Child1, None)
                 assert check_instance_with_type_guard(instance)
-                reveal_type(instance)
+                # ^ REVEAL instance ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
+
+                children: Concrete[Parent]
+                # ^ REVEAL children ^ Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]
+
+                children_qs: DefaultQuerySet[Parent]
+                # ^ REVEAL children_qs ^ Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]
 
                 child: Concrete[Child1]
-                reveal_type(child)
+                # ^ REVEAL child ^ myapp.models.Child1
 
-                child1_qs1: ConcreteQuerySet[Child1]
-                reveal_type(child1_qs1)
+                child1_qs: DefaultQuerySet[Child1]
+                # ^ REVEAL child1_qs ^ django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]
 
-                child1_qs2: DefaultQuerySet[Child1]
-                reveal_type(child1_qs2)
+                child2_qs: DefaultQuerySet[Child2]
+                # ^ REVEAL child2_qs ^ myapp.models.Child2QuerySet
 
-                child2_qs1: ConcreteQuerySet[Child2]
-                reveal_type(child2_qs1)
+                t1_children: type[Concrete[Parent]]
+                # ^ REVEAL t1_children ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
 
-                child2_qs2: DefaultQuerySet[Child2]
-                reveal_type(child2_qs2)
+                t1_children_qs: type[DefaultQuerySet[Parent]]
+                # ^ REVEAL t1_children_qs ^ Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
+
+                t1_child: type[Concrete[Child1]]
+                # ^ REVEAL t1_child ^ type[myapp.models.Child1]
+
+                t1_child1_qs: type[DefaultQuerySet[Child1]]
+                # ^ REVEAL t1_child1_qs ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
+
+                t1_child2_qs: type[DefaultQuerySet[Child2]]
+                # ^ REVEAL t1_child2_qs ^ type[myapp.models.Child2QuerySet]
+
+                t2_children: Concrete[type[Parent]]
+                # ^ REVEAL t2_children ^ Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]
+
+                t2_children_qs: DefaultQuerySet[type[Parent]]
+                # ^ REVEAL t2_children_qs ^ Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]
+
+                t2_child: Concrete[type[Child1]]
+                # ^ REVEAL t2_child ^ type[myapp.models.Child1]
+
+                t2_child1_qs: DefaultQuerySet[type[Child1]]
+                # ^ REVEAL t2_child1_qs ^ type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]
+
+                t2_child2_qs: DefaultQuerySet[type[Child2]]
+                # ^ REVEAL t2_child2_qs ^ type[myapp.models.Child2QuerySet]
                 """,
-            )
-
-            (
-                expected.on("main.py")
-                .add_revealed_type(
-                    7,
-                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                )
-                .add_revealed_type(
-                    10,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]",
-                )
-                .add_revealed_type(
-                    20,
-                    "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
-                )
-                .add_revealed_type(
-                    24,
-                    "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
-                )
-                .add_revealed_type(
-                    27,
-                    "Union[myapp.models.Child1]",
-                )
-                .add_revealed_type(
-                    30,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                )
-                .add_revealed_type(
-                    33,
-                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
-                )
-                .add_revealed_type(
-                    36,
-                    "Union[myapp.models.Child2QuerySet]",
-                )
-                .add_revealed_type(
-                    39,
-                    "Union[myapp.models.Child2QuerySet]",
-                )
             )
 
     def test_sees_apps_removed_when_they_still_exist_but_no_longer_installed(
@@ -98,14 +90,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from myapp.models import Parent
 
                 models: Concrete[Parent]
                 reveal_type(models)
 
-                qs: ConcreteQuerySet[Parent]
+                qs: DefaultQuerySet[Parent]
                 reveal_type(qs)
                 """,
             )
@@ -148,14 +140,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from myapp.models import Parent
 
                 model: Concrete[Parent]
                 model.concrete_from_myapp
 
-                qs: ConcreteQuerySet[Parent]
+                qs: DefaultQuerySet[Parent]
                 qs.values("concrete_from_myapp")
                 """,
             )
@@ -186,14 +178,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from myapp.models import Parent
 
                 models: Concrete[Parent]
                 reveal_type(models)
 
-                qs: ConcreteQuerySet[Parent]
+                qs: DefaultQuerySet[Parent]
                 qs.values("concrete_from_myapp")
                 """,
             )
@@ -235,14 +227,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from myapp.models import Parent
 
                 models: Concrete[Parent]
                 models.two
 
-                qs: ConcreteQuerySet[Parent]
+                qs: DefaultQuerySet[Parent]
                 qs.values("two")
                 """,
             )
@@ -285,14 +277,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from leader.models import Leader
 
                 models: Concrete[Leader]
                 reveal_type(models)
 
-                qs: ConcreteQuerySet[Leader]
+                qs: DefaultQuerySet[Leader]
                 reveal_type(qs)
                 qs.good_ones().values("nup")
                 """,
@@ -300,8 +292,8 @@ class TestConcreteAnnotations:
 
             (
                 expected.on("main.py")
-                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
-                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_revealed_type(6, "follower1.models.follower1.Follower1")
+                .add_revealed_type(9, "follower1.models.follower1.Follower1QuerySet")
                 .add_error(
                     10,
                     "misc",
@@ -415,14 +407,14 @@ class TestConcreteAnnotations:
             scenario.make_file(
                 "main.py",
                 """
-                from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
 
                 from leader.models import Leader
 
                 models: Concrete[Leader]
                 reveal_type(models)
 
-                qs: ConcreteQuerySet[Leader]
+                qs: DefaultQuerySet[Leader]
                 reveal_type(qs)
                 qs.good_ones().values("nup")
                 """,
@@ -430,8 +422,8 @@ class TestConcreteAnnotations:
 
             (
                 expected.on("main.py")
-                .add_revealed_type(6, "Union[follower1.models.follower1.Follower1]")
-                .add_revealed_type(9, "Union[follower1.models.follower1.Follower1QuerySet]")
+                .add_revealed_type(6, "follower1.models.follower1.Follower1")
+                .add_revealed_type(9, "follower1.models.follower1.Follower1QuerySet")
                 .add_error(
                     10,
                     "misc",

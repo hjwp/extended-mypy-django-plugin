@@ -1,3 +1,4 @@
+import re
 import textwrap
 from collections.abc import Mapping
 from typing import Protocol, TypedDict, overload
@@ -7,6 +8,12 @@ from pytest_mypy_plugins.scenario import Strategy
 from typing_extensions import NotRequired, Unpack
 
 from .output_builder import OutputBuilder
+
+regexes = {
+    "reveal_tag": re.compile(
+        r"^(?P<prefix_whitespace>\s*)#\s*\^\s*REVEAL\s+(?P<var_name>[^ ]+)\s*\^\s*(?P<rest>.*)"
+    ),
+}
 
 
 class RunArgs(TypedDict):
@@ -43,6 +50,36 @@ class Scenario:
 
     def make_file(self, path: str, content: str) -> File:
         file = File(path=path, content=textwrap.dedent(content).lstrip())
+        self.scenario.make_file(file)
+        return file
+
+    def make_file_with_reveals(
+        self, expected: OutputBuilder, expect_num_reveals: int, path: str, content: str
+    ) -> File:
+        content = textwrap.dedent(content).lstrip()
+        result: list[str] = []
+        expected = expected.on(path)
+
+        made: int = 0
+
+        for i, line in enumerate(content.split("\n")):
+            m = regexes["reveal_tag"].match(line)
+            if m is None:
+                if line.strip().startswith("#") and ("REVEAL" in line or "^" in line):
+                    raise AssertionError(f"Found a potential reveal tag that was invalid:: {line}")
+                result.append(line)
+                continue
+
+            gd = m.groupdict()
+            result.append(f"{gd['prefix_whitespace']}reveal_type({gd['var_name']})")
+            expected.add_revealed_type(i + 1, gd["rest"])
+            made += 1
+
+        assert (
+            made == expect_num_reveals
+        ), f"Only expected to find {expect_num_reveals} reveal tags but instead found {made}"
+
+        file = File(path=path, content="\n".join(result))
         self.scenario.make_file(file)
         return file
 
