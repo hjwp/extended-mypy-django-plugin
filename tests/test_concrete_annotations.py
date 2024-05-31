@@ -11,7 +11,7 @@ class TestConcreteAnnotations:
                 from extended_mypy_django_plugin import Concrete, ConcreteQuerySet, DefaultQuerySet
                 from typing import cast, TypeGuard
 
-                from myapp.models import Parent, Child1
+                from myapp.models import Parent, Child1, Child2
 
                 models: Concrete[Parent]
                 reveal_type(models)
@@ -32,6 +32,21 @@ class TestConcreteAnnotations:
                 instance: Parent = cast(Child1, None)
                 assert check_instance_with_type_guard(instance)
                 reveal_type(instance)
+
+                child: Concrete[Child1]
+                reveal_type(child)
+
+                child1_qs1: ConcreteQuerySet[Child1]
+                reveal_type(child1_qs1)
+
+                child1_qs2: DefaultQuerySet[Child1]
+                reveal_type(child1_qs2)
+
+                child2_qs1: ConcreteQuerySet[Child2]
+                reveal_type(child2_qs1)
+
+                child2_qs2: DefaultQuerySet[Child2]
+                reveal_type(child2_qs2)
                 """,
             )
 
@@ -52,6 +67,26 @@ class TestConcreteAnnotations:
                 .add_revealed_type(
                     24,
                     "Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]",
+                )
+                .add_revealed_type(
+                    27,
+                    "Union[myapp.models.Child1]",
+                )
+                .add_revealed_type(
+                    30,
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                )
+                .add_revealed_type(
+                    33,
+                    "Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                )
+                .add_revealed_type(
+                    36,
+                    "Union[myapp.models.Child2QuerySet]",
+                )
+                .add_revealed_type(
+                    39,
+                    "Union[myapp.models.Child2QuerySet]",
                 )
             )
 
