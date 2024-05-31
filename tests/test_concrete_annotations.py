@@ -82,6 +82,70 @@ class TestConcreteAnnotations:
                 """,
             )
 
+    def test_using_concrete_annotation_on_class_used_in_annotation(
+        self, scenario: Scenario
+    ) -> None:
+        @scenario.run_and_check_mypy_after(installed_apps=["example"])
+        def _(expected: OutputBuilder) -> None:
+            scenario.make_file("example/__init__.py", "")
+
+            scenario.make_file(
+                "example/apps.py",
+                """
+                from django.apps import AppConfig
+
+                class Config(AppConfig):
+                    name = "example"
+                """,
+            )
+
+            scenario.make_file(
+                "example/models.py",
+                """
+                from __future__ import annotations
+
+                from django.db import models
+                from extended_mypy_django_plugin import Concrete, DefaultQuerySet
+
+                class Leader(models.Model):
+                    @classmethod
+                    def new(cls) -> Concrete[Leader]:
+                        return None # type: ignore[return-value]
+
+                    def qs(self) -> DefaultQuerySet[Leader]:
+                        return None # type: ignore[return-value]
+
+                    class Meta:
+                        abstract = True
+
+                class Follower1QuerySet(models.QuerySet["Follower1"]):
+                    ...
+
+                Follower1Manager = models.Manager.from_queryset(Follower1QuerySet)
+
+                class Follower1(Leader):
+                    objects = Follower1Manager()
+
+                class Follower2(Leader):
+                    ...
+                """,
+            )
+
+            scenario.make_file_with_reveals(
+                expected,
+                2,
+                "main.py",
+                """
+                from example.models import Leader
+
+                leader = Leader.new()
+                # ^ REVEAL leader ^ Union[example.models.Follower1, example.models.Follower2]
+
+                qs = leader.qs()
+                # ^ REVEAL qs ^ Union[example.models.Follower1QuerySet, django.db.models.query.QuerySet[example.models.Follower2, example.models.Follower2]]
+                """,
+            )
+
     def test_sees_apps_removed_when_they_still_exist_but_no_longer_installed(
         self, scenario: Scenario
     ) -> None:
