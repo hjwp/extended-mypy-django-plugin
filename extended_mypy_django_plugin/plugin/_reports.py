@@ -200,6 +200,7 @@ class _DepFinder:
     def _find_models_in_mro(self, mod: str, cls: type[models.Model]) -> None:
         cls_fullname = f"{cls.__module__}.{cls.__qualname__}"
         self.known_models[mod].add(cls_fullname)
+        self.model_children[cls_fullname].add(cls_fullname)
 
         for mro in cls.mro():
             if mro is cls:
