@@ -56,6 +56,54 @@ class TestConcreteAnnotations:
 
                 child2_qs2: DefaultQuerySet[Child2]
                 reveal_type(child2_qs2)
+
+                t1_children: type[Concrete[Parent]]
+                reveal_type(t1_children)
+
+                t1_children_qs1: type[ConcreteQuerySet[Parent]]
+                reveal_type(t1_children_qs1)
+
+                t1_children_qs2: type[DefaultQuerySet[Parent]]
+                reveal_type(t1_children_qs2)
+
+                t1_child: type[Concrete[Child1]]
+                reveal_type(t1_child)
+
+                t1_child1_qs1: type[ConcreteQuerySet[Child1]]
+                reveal_type(t1_child1_qs1)
+
+                t1_child1_qs2: type[DefaultQuerySet[Child1]]
+                reveal_type(t1_child1_qs2)
+
+                t1_child2_qs1: type[ConcreteQuerySet[Child2]]
+                reveal_type(t1_child2_qs1)
+
+                t1_child2_qs2: type[DefaultQuerySet[Child2]]
+                reveal_type(t1_child2_qs2)
+
+                t2_children: Concrete[type[Parent]]
+                reveal_type(t2_children)
+
+                t2_children_qs1: ConcreteQuerySet[type[Parent]]
+                reveal_type(t2_children_qs1)
+
+                t2_children_qs2: DefaultQuerySet[type[Parent]]
+                reveal_type(t2_children_qs2)
+
+                t2_child: Concrete[type[Child1]]
+                reveal_type(t2_child)
+
+                t2_child1_qs1: ConcreteQuerySet[type[Child1]]
+                reveal_type(t2_child1_qs1)
+
+                t2_child1_qs2: DefaultQuerySet[type[Child1]]
+                reveal_type(t2_child1_qs2)
+
+                t2_child2_qs1: ConcreteQuerySet[type[Child2]]
+                reveal_type(t2_child2_qs1)
+
+                t2_child2_qs2: DefaultQuerySet[type[Child2]]
+                reveal_type(t2_child2_qs2)
                 """,
             )
 
@@ -107,6 +155,70 @@ class TestConcreteAnnotations:
                 (
                     48,
                     "Union[myapp.models.Child2QuerySet]",
+                ),
+                (
+                    51,
+                    "Union[type[myapp.models.Child1], type[myapp.models.Child2], type[myapp.models.Child3], type[myapp2.models.ChildOther]]",
+                ),
+                (
+                    54,
+                    "Union[type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]], type[myapp.models.Child2QuerySet], type[django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3]], type[django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]",
+                ),
+                (
+                    57,
+                    "type[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]",
+                ),
+                (
+                    60,
+                    "type[myapp.models.Child1]",
+                ),
+                (
+                    63,
+                    "type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                ),
+                (
+                    66,
+                    "type[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]",
+                ),
+                (
+                    69,
+                    "type[myapp.models.Child2QuerySet]",
+                ),
+                (
+                    72,
+                    "type[myapp.models.Child2QuerySet]",
+                ),
+                (
+                    75,
+                    "type[Union[myapp.models.Child1, myapp.models.Child2, myapp.models.Child3, myapp2.models.ChildOther]]",
+                ),
+                (
+                    78,
+                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1], myapp.models.Child2QuerySet, django.db.models.query.QuerySet[myapp.models.Child3, myapp.models.Child3], django.db.models.query.QuerySet[myapp2.models.ChildOther, myapp2.models.ChildOther]]]",
+                ),
+                (
+                    81,
+                    "type[Union[django.db.models.query.QuerySet[myapp.models.Parent, myapp.models.Parent]]]",
+                ),
+                (
+                    84,
+                    "type[Union[myapp.models.Child1]]",
+                ),
+                (
+                    87,
+                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]",
+                ),
+                (
+                    90,
+                    "type[Union[django.db.models.query.QuerySet[myapp.models.Child1, myapp.models.Child1]]]",
+                ),
+                (
+                    93,
+                    "type[Union[myapp.models.Child2QuerySet]]",
+                ),
+                (
+                    96,
+                    "type[Union[myapp.models.Child2QuerySet]]",
                 ),
             ]
 

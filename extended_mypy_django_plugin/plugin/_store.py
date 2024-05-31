@@ -5,7 +5,6 @@ from typing import Protocol
 from django.db import models
 from mypy.nodes import TypeInfo
 from mypy.types import Instance, UnionType, get_proper_type
-from mypy.types import Type as MypyType
 
 from ._reports import ModelModules
 
@@ -75,12 +74,12 @@ class Store:
         parent: TypeInfo,
         lookup_info: LookupFunction,
         lookup_instance: LookupInstanceFunction,
-    ) -> Sequence[MypyType]:
+    ) -> Sequence[Instance]:
         """
         Given a ``TypeInfo`` representing some model, return ``MypyType`` objects
         for all the concrete children related to the specified model.
         """
-        values: list[MypyType] = []
+        values: list[Instance] = []
 
         concrete_type_infos = self._retrieve_concrete_children_info_from_metadata(
             parent, lookup_info
