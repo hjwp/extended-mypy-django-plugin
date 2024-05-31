@@ -3,7 +3,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import Protocol
 
 from django.db import models
-from mypy.nodes import TypeInfo
+from mypy.nodes import SymbolTableNode, TypeInfo
 from mypy.types import Instance, UnionType, get_proper_type
 
 from ._reports import ModelModules
@@ -23,8 +23,12 @@ class RestartDmypy(Exception):
     pass
 
 
-class LookupFunction(Protocol):
+class LookupInfo(Protocol):
     def __call__(self, fullname: str) -> TypeInfo | None: ...
+
+
+class LookupNode(Protocol):
+    def __call__(self, fullname: str) -> SymbolTableNode | None: ...
 
 
 class LookupInstanceFunction(Protocol):
@@ -57,22 +61,26 @@ class Store:
     def __init__(
         self,
         get_model_class_by_fullname: GetModelClassByFullname,
-        lookup_info: LookupFunction,
+        lookup_info: LookupInfo,
+        lookup_fully_qualified: LookupNode,
         django_context_model_modules: Mapping[str, object],
         is_installed_model: IsInstalledModel,
         known_concrete_models: KnownConcreteModelsGetter,
     ) -> None:
         self._get_model_class_by_fullname = get_model_class_by_fullname
-        self._plugin_lookup_info = lookup_info
         self._django_context_model_modules = django_context_model_modules
         self._is_installed_model = is_installed_model
         self._known_concrete_models = known_concrete_models
+
+        self.plugin_lookup_info = lookup_info
+        self.plugin_lookup_fully_qualified = lookup_fully_qualified
+
         self.model_modules = self._determine_model_modules()
 
     def retrieve_concrete_children_types(
         self,
         parent: TypeInfo,
-        lookup_info: LookupFunction,
+        lookup_info: LookupInfo,
         lookup_instance: LookupInstanceFunction,
     ) -> Sequence[Instance]:
         """
@@ -92,7 +100,7 @@ class Store:
         return values
 
     def realise_querysets(
-        self, type_var: Instance | UnionType, lookup_info: LookupFunction
+        self, type_var: Instance | UnionType, lookup_info: LookupInfo
     ) -> Iterator[Instance]:
         """
         Given either a specific model, or a union of models, return the
@@ -129,7 +137,7 @@ class Store:
         return result
 
     def _retrieve_concrete_children_info_from_metadata(
-        self, parent: TypeInfo, lookup_info: LookupFunction
+        self, parent: TypeInfo, lookup_info: LookupInfo
     ) -> Sequence[TypeInfo]:
         """
         For the children recorded in the metadata for this model, return those
@@ -157,7 +165,7 @@ class Store:
         return ret
 
     def _get_queryset_fullnames(
-        self, type_var: Instance | UnionType, lookup_info: LookupFunction
+        self, type_var: Instance | UnionType, lookup_info: LookupInfo
     ) -> Iterator[tuple[str, TypeInfo]]:
         """
         Return the fullnames of the default querysets for the models represented
@@ -179,9 +187,7 @@ class Store:
                 child,
             )
 
-    def _get_dynamic_manager(
-        self, model: TypeInfo, lookup_info: LookupFunction
-    ) -> TypeInfo | None:
+    def _get_dynamic_manager(self, model: TypeInfo, lookup_info: LookupInfo) -> TypeInfo | None:
         """
         For some model return a custom manager if one exists
         """
@@ -226,7 +232,7 @@ class Store:
         return manager_info
 
     def _get_dynamic_queryset_fullname(
-        self, model: TypeInfo, lookup_info: LookupFunction
+        self, model: TypeInfo, lookup_info: LookupInfo
     ) -> str | None:
         """
         For this model, return the fullname of the custom queryset for the

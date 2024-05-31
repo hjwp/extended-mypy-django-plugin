@@ -13,7 +13,13 @@ from mypy.nodes import (
     TypeInfo,
     TypeVarExpr,
 )
-from mypy.plugin import AttributeContext, FunctionContext, MethodContext
+from mypy.plugin import (
+    AttributeContext,
+    FunctionContext,
+    FunctionSigContext,
+    MethodContext,
+    MethodSigContext,
+)
 from mypy.types import (
     AnyType,
     CallableType,
@@ -31,10 +37,6 @@ from typing_extensions import Self
 
 from .. import _known_annotations, _store
 from . import _annotation_resolver
-
-
-class LookupFunction(Protocol):
-    def __call__(self, fullname: str) -> TypeInfo | None: ...
 
 
 class FailFunc(Protocol):
@@ -135,7 +137,7 @@ class BasicTypeInfo:
 
     item: ProperType
     type_vars: list[tuple[bool, TypeVarType | str]]
-    lookup_info: LookupFunction
+    lookup_info: _store.LookupInfo
     defining_scope: DefiningScope
     concrete_annotation: _known_annotations.KnownAnnotations | None
 
@@ -145,7 +147,7 @@ class BasicTypeInfo:
         func: CallableType,
         fail: FailFunc,
         defining_scope: DefiningScope,
-        lookup_info: LookupFunction,
+        lookup_info: _store.LookupInfo,
         item: MypyType | None = None,
     ) -> Self:
         is_type: bool = False
@@ -466,4 +468,121 @@ class TypeChecking:
             return AnyType(TypeOfAny.from_error)
 
     def lookup_info(self, fullname: str) -> TypeInfo | None:
-        return self.store._plugin_lookup_info(fullname)
+        return self.store.plugin_lookup_info(fullname)
+
+
+class SharedAnnotationHookLogic:
+    """
+    Shared logic for modifying the return type of methods and functions that use a concrete
+    annotation with a type variable.
+
+    Note that the signature hook will already raise errors if a concrete annotation is
+    used with a type var in a type guard.
+    """
+
+    def __init__(self, store: _store.Store, fullname: str) -> None:
+        self.store = store
+        self.fullname = fullname
+
+    def choose(self) -> bool:
+        """
+        Choose methods and functions either returning a type guard or have a generic
+        return type.
+
+        We determine whether the return type is a concrete annotation or not in the run method.
+        """
+        if self.fullname.startswith("builtins."):
+            return False
+
+        sym = self.store.plugin_lookup_fully_qualified(self.fullname)
+        if not sym or not sym.node:
+            return False
+
+        call = getattr(sym.node, "type", None)
+        if not isinstance(call, CallableType):
+            return False
+
+        ret_type = call.ret_type
+        if call.type_guard:
+            ret_type = call.type_guard
+
+        ret_type = get_proper_type(ret_type)
+        if isinstance(ret_type, TypeType):
+            ret_type = ret_type.item
+
+        if isinstance(ret_type, UnboundType):
+            return ret_type.name in [
+                known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
+            ]
+        elif isinstance(ret_type, Instance):
+            try:
+                _known_annotations.KnownAnnotations(ret_type.type.fullname)
+            except ValueError:
+                return False
+            else:
+                return True
+        else:
+            return False
+
+    def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
+        assert isinstance(ctx.api, TypeChecker)
+
+        type_checking = TypeChecking(self.store, api=ctx.api)
+
+        return type_checking.modify_return_type(ctx)
+
+
+class SharedSignatureHookLogic:
+    """
+    Shared logic for modifying the signature of methods and functions.
+
+    This is only used to find cases where a concrete annotation with a type var
+    is used in a type guard.
+
+    In this situation the mypy plugin system does not provide an opportunity to fully resolve
+    the type guard.
+    """
+
+    def __init__(self, store: _store.Store, fullname: str) -> None:
+        self.store = store
+        self.fullname = fullname
+
+    def choose(self) -> bool:
+        """
+        Only choose methods and functions that are returning a type guard
+        """
+        if self.fullname.startswith("builtins."):
+            return False
+
+        sym = self.store.plugin_lookup_fully_qualified(self.fullname)
+        if not sym or not sym.node:
+            return False
+
+        call = getattr(sym.node, "type", None)
+        if not isinstance(call, CallableType):
+            return False
+
+        ret_type = call.ret_type
+        if call.type_guard:
+            ret_type = call.type_guard
+
+        ret_type = get_proper_type(ret_type)
+
+        if isinstance(ret_type, TypeType):
+            ret_type = ret_type.item
+
+        if not isinstance(ret_type, UnboundType):
+            return False
+
+        return ret_type.name in [
+            known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
+        ]
+
+    def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
+        assert isinstance(ctx.api, TypeChecker)
+
+        type_checking = TypeChecking(self.store, api=ctx.api)
+
+        return type_checking.check_typeguard(
+            ctx.context, is_function=isinstance(ctx, FunctionSigContext)
+        )

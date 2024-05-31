@@ -18,14 +18,7 @@ from mypy.plugin import (
 )
 from mypy.semanal import SemanticAnalyzer
 from mypy.typeanal import TypeAnalyser
-from mypy.types import (
-    CallableType,
-    FunctionLike,
-    Instance,
-    TypeType,
-    UnboundType,
-    get_proper_type,
-)
+from mypy.types import FunctionLike, Instance
 from mypy.types import Type as MypyType
 from mypy_django_plugin import main
 from mypy_django_plugin.django.context import DjangoContext
@@ -94,6 +87,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
         self.store = _store.Store(
             get_model_class_by_fullname=self.django_context.get_model_class_by_fullname,
             lookup_info=self._lookup_info,
+            lookup_fully_qualified=self.lookup_fully_qualified,
             django_context_model_modules=self.django_context.model_modules,
             is_installed_model=self._is_installed_model,
             known_concrete_models=self.report.known_concrete_models,
@@ -208,7 +202,7 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
             assert isinstance(ctx.api.api, SemanticAnalyzer)
 
             type_analyzer = actions.TypeAnalyzer(self.store, ctx.api, ctx.api.api)
-            return type_analyzer.analyze(ctx, self.annotation, self.plugin._lookup_info)
+            return type_analyzer.analyze(ctx, self.annotation)
 
     @_hook.hook
     class get_attribute_hook(Hook[AttributeContext, MypyType]):
@@ -229,74 +223,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
                 ctx, resolve_manager_method_from_instance=resolve_manager_method_from_instance
             )
 
-    class SharedAnnotationHookLogic:
-        """
-        Shared logic for modifying the return type of methods and functions that use a concrete
-        annotation with a type variable.
-
-        Note that the signature hook will already raise errors if a concrete annotation is
-        used with a type var in a type guard.
-        """
-
-        def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
-            self.plugin = plugin
-            self.store = plugin.store
-            self.fullname = fullname
-
-        def choose(self) -> bool:
-            """
-            Choose methods and functions either returning a type guard or have a generic
-            return type.
-
-            We determine whether the return type is a concrete annotation or not in the run method.
-            """
-            if self.fullname.startswith("builtins."):
-                return False
-
-            sym = self.plugin.lookup_fully_qualified(self.fullname)
-            if not sym or not sym.node:
-                return False
-
-            call = getattr(sym.node, "type", None)
-            if not isinstance(call, CallableType):
-                return False
-
-            ret_type = call.ret_type
-            if call.type_guard:
-                ret_type = call.type_guard
-
-            ret_type = get_proper_type(ret_type)
-            if isinstance(ret_type, TypeType):
-                ret_type = ret_type.item
-
-            if isinstance(ret_type, UnboundType):
-                return ret_type.name in [
-                    known.value.rpartition(".")[-1]
-                    for known in _known_annotations.KnownAnnotations
-                ]
-            elif isinstance(ret_type, Instance):
-                try:
-                    _known_annotations.KnownAnnotations(ret_type.type.fullname)
-                except ValueError:
-                    return False
-                else:
-                    return True
-            else:
-                return False
-
-        def run(self, ctx: MethodContext | FunctionContext) -> MypyType | None:
-            assert isinstance(ctx.api, TypeChecker)
-
-            type_checking = actions.TypeChecking(self.store, api=ctx.api)
-
-            return type_checking.modify_return_type(ctx)
-
     class _get_method_or_function_hook(Hook[MethodContext | FunctionContext, MypyType]):
         runner: Callable[[MethodContext | FunctionContext], MypyType | None]
 
         def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedAnnotationHookLogic(
-                fullname=self.fullname, plugin=self.plugin
+            super().extra_init()
+            self.shared_logic = actions.SharedAnnotationHookLogic(
+                self.store, fullname=self.fullname
             )
 
         def choose(self) -> bool:
@@ -324,68 +257,13 @@ class ExtendedMypyStubs(main.NewSemanalDjangoPlugin):
     class get_function_hook(_get_method_or_function_hook):
         pass
 
-    class SharedSignatureHookLogic:
-        """
-        Shared logic for modifying the signature of methods and functions.
-
-        This is only used to find cases where a concrete annotation with a type var
-        is used in a type guard.
-
-        In this situation the mypy plugin system does not provide an opportunity to fully resolve
-        the type guard.
-        """
-
-        def __init__(self, fullname: str, plugin: "ExtendedMypyStubs") -> None:
-            self.plugin = plugin
-            self.store = plugin.store
-            self.fullname = fullname
-
-        def choose(self) -> bool:
-            """
-            Only choose methods and functions that are returning a type guard
-            """
-            if self.fullname.startswith("builtins."):
-                return False
-
-            sym = self.plugin.lookup_fully_qualified(self.fullname)
-            if not sym or not sym.node:
-                return False
-
-            call = getattr(sym.node, "type", None)
-            if not isinstance(call, CallableType):
-                return False
-
-            ret_type = call.ret_type
-            if call.type_guard:
-                ret_type = call.type_guard
-
-            ret_type = get_proper_type(ret_type)
-
-            if isinstance(ret_type, TypeType):
-                ret_type = ret_type.item
-
-            if not isinstance(ret_type, UnboundType):
-                return False
-
-            return ret_type.name in [
-                known.value.rpartition(".")[-1] for known in _known_annotations.KnownAnnotations
-            ]
-
-        def run(self, ctx: MethodSigContext | FunctionSigContext) -> MypyType | None:
-            assert isinstance(ctx.api, TypeChecker)
-
-            type_checking = actions.TypeChecking(self.store, api=ctx.api)
-
-            return type_checking.check_typeguard(
-                ctx.context, is_function=isinstance(ctx, FunctionSigContext)
-            )
-
     class _get_method_or_function_signature_hook(
         Hook[MethodSigContext | FunctionSigContext, FunctionLike]
     ):
         def extra_init(self) -> None:
-            self.shared_logic = self.plugin.SharedSignatureHookLogic(
-                fullname=self.fullname, plugin=self.plugin
+            super().extra_init()
+            self.shared_logic = actions.SharedSignatureHookLogic(
+                self.store, fullname=self.fullname
             )
 
         def choose(self) -> bool:

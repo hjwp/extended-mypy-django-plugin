@@ -40,7 +40,7 @@ class AnnotationResolver:
         store: _store.Store,
         fail: FailFunc,
         defer: DeferFunc,
-        lookup_info: _store.LookupFunction,
+        lookup_info: _store.LookupInfo,
         named_type_or_none: NamedTypeOrNone,
     ) -> None:
         self._store = store

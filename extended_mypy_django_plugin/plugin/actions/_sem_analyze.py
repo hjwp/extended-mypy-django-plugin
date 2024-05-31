@@ -27,19 +27,16 @@ class TypeAnalyzer:
         self.store = store
         self.sem_api = sem_api
 
+    def _lookup_info(self, fullname: str) -> TypeInfo | None:
+        instance = self.sem_api.named_type_or_none(fullname)
+        if instance:
+            return instance.type
+
+        return self.store.plugin_lookup_info(fullname)
+
     def analyze(
-        self,
-        ctx: AnalyzeTypeContext,
-        annotation: _known_annotations.KnownAnnotations,
-        lookup_info: _store.LookupFunction,
+        self, ctx: AnalyzeTypeContext, annotation: _known_annotations.KnownAnnotations
     ) -> MypyType:
-        def _lookup_info(fullname: str) -> TypeInfo | None:
-            instance = self.sem_api.named_type_or_none(fullname)
-            if instance:
-                return instance.type
-
-            return lookup_info(fullname)
-
         def defer() -> bool:
             if self.sem_api.final_iteration:
                 return True
@@ -51,7 +48,7 @@ class TypeAnalyzer:
             self.store,
             defer=defer,
             fail=lambda msg: self.api.fail(msg, ctx.context),
-            lookup_info=_lookup_info,
+            lookup_info=self._lookup_info,
             named_type_or_none=self.sem_api.named_type_or_none,
         )
 
@@ -70,6 +67,13 @@ class SemAnalyzing:
     def __init__(self, store: _store.Store, *, api: SemanticAnalyzer) -> None:
         self.api = api
         self.store = store
+
+    def _lookup_info(self, fullname: str) -> TypeInfo | None:
+        instance = self.api.named_type_or_none(fullname)
+        if instance:
+            return instance.type
+
+        return self.store.plugin_lookup_info(fullname)
 
     def transform_type_var_classmethod(self, ctx: DynamicClassDefContext) -> None:
         if not isinstance(ctx.call.args[0], StrExpr):
@@ -112,7 +116,7 @@ class SemAnalyzing:
 
         object_type = self.api.named_type("builtins.object")
         values = self.store.retrieve_concrete_children_types(
-            parent.node, self.lookup_info, self.api.named_type_or_none
+            parent.node, self._lookup_info, self.api.named_type_or_none
         )
         if not values:
             self.api.fail(f"No concrete children found for {parent.node.fullname}", ctx.call)
@@ -127,10 +131,3 @@ class SemAnalyzing:
 
         module.names[name] = SymbolTableNode(GDEF, type_var_expr, plugin_generated=True)
         return None
-
-    def lookup_info(self, fullname: str) -> TypeInfo | None:
-        instance = self.api.named_type_or_none(fullname)
-        if instance:
-            return instance.type
-
-        return self.store._plugin_lookup_info(fullname)
